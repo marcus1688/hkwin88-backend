@@ -664,6 +664,82 @@ router.post(
   }
 );
 
+router.post(
+  "/api/joker/updatepassword/:userId",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { userId } = req.params;
+
+      const { newpassword } = req.body;
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User not found. Please try again or contact customer service for assistance.",
+            zh: "用户未找到，请重试或联系客服以获取帮助。",
+            ms: "Pengguna tidak ditemui, sila cuba lagi atau hubungi khidmat pelanggan untuk bantuan.",
+            zh_hk: "搵唔到用戶，麻煩再試多次或者聯絡客服幫手。",
+            id: "Pengguna tidak ditemukan. Silakan coba lagi atau hubungi layanan pelanggan untuk bantuan.",
+          },
+        });
+      }
+
+      if (!newpassword) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "New password is required.",
+            zh: "需要新密码。",
+            ms: "Kata laluan baharu diperlukan.",
+            zh_hk: "需要新密碼。",
+            id: "Kata sandi baru diperlukan.",
+          },
+        });
+      }
+
+      const updatePasswordResponse = await setJokerPassword(user, newpassword);
+      if (!updatePasswordResponse.success) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "JOKER: Failed to update password. Please try again or contact customer support for assistance.",
+            zh: "JOKER: 更新密码失败。请重试或联系客服寻求帮助。",
+            ms: "JOKER: Gagal mengemas kini kata laluan. Sila cuba lagi atau hubungi sokongan pelanggan untuk bantuan.",
+            zh_hk: "JOKER: 更新密碼失敗。請重試或聯絡客服尋求協助。",
+            id: "JOKER: Gagal memperbarui kata sandi. Silakan coba lagi atau hubungi dukungan pelanggan untuk bantuan.",
+          },
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: {
+          en: "JOKER: Password updated successfully.",
+          zh: "JOKER: 密码更新成功。",
+          ms: "JOKER: Kata laluan berjaya dikemas kini.",
+          zh_hk: "JOKER: 密碼更新成功。",
+          id: "JOKER: Kata sandi berhasil diperbarui.",
+        },
+      });
+    } catch (error) {
+      console.log("JOKER error updating password:", error.message);
+      return res.status(200).json({
+        success: false,
+        message: {
+          en: "JOKER: Failed to update password due to a technical issue. Please try again or contact customer support for assistance.",
+          zh: "JOKER: 由于技术问题更新密码失败。请重试或联系客服寻求帮助。",
+          ms: "JOKER: Gagal mengemas kini kata laluan kerana masalah teknikal. Sila cuba lagi atau hubungi sokongan pelanggan untuk bantuan.",
+          zh_hk: "JOKER: 由於技術問題更新密碼失敗。請重試或聯絡客服尋求協助。",
+          id: "JOKER: Gagal memperbarui kata sandi karena masalah teknis. Silakan coba lagi atau hubungi dukungan pelanggan untuk bantuan.",
+        },
+      });
+    }
+  }
+);
+
 module.exports = router;
 module.exports.registerJokerUser = registerJokerUser;
 module.exports.JokerCheckBalance = JokerCheckBalance;
