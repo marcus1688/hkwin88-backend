@@ -308,67 +308,71 @@ async function registerJokerUser(user) {
   }
 }
 
-router.post("/api/joker/register", authenticateToken, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const user = await User.findById(userId);
+router.post(
+  "/api/joker/register/:userId",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const user = await User.findById(userId);
 
-    if (!user) {
+      if (!user) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User not found. Please try again or contact customer service for assistance.",
+            zh: "用户未找到，请重试或联系客服以获取帮助。",
+            ms: "Pengguna tidak ditemui, sila cuba lagi atau hubungi khidmat pelanggan untuk bantuan.",
+            zh_hk: "搵唔到用戶，麻煩再試多次或者聯絡客服幫手。",
+            id: "Pengguna tidak ditemukan. Silakan coba lagi atau hubungi layanan pelanggan untuk bantuan.",
+          },
+        });
+      }
+
+      const registerResponse = await registerJokerUser(user);
+
+      if (!registerResponse.success) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "JOKER: Registration failed. Please try again or contact customer support for further assistance.",
+            zh: "JOKER: 注册失败。请重试或联系客服寻求进一步帮助。",
+            ms: "JOKER: Pendaftaran gagal. Sila cuba lagi atau hubungi sokongan pelanggan untuk bantuan lanjut.",
+            zh_hk: "JOKER: 註冊失敗。請重試或聯絡客服尋求進一步協助。",
+            id: "JOKER: Pendaftaran gagal. Silakan coba lagi atau hubungi dukungan pelanggan untuk bantuan lebih lanjut.",
+          },
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: {
+          en: "JOKER: Account registered successfully.",
+          zh: "JOKER: 账户注册成功。",
+          ms: "JOKER: Akaun berjaya didaftarkan.",
+          zh_hk: "JOKER: 帳戶註冊成功。",
+          id: "JOKER: Akun berhasil didaftarkan.",
+        },
+        gameAccount: {
+          gameID: `${gameAPPID}.${user.gameId}`,
+          gamePW: gamePassword,
+        },
+      });
+    } catch (error) {
+      console.log("JOKER error fetching balance", error.message);
       return res.status(200).json({
         success: false,
         message: {
-          en: "User not found. Please try again or contact customer service for assistance.",
-          zh: "用户未找到，请重试或联系客服以获取帮助。",
-          ms: "Pengguna tidak ditemui, sila cuba lagi atau hubungi khidmat pelanggan untuk bantuan.",
-          zh_hk: "搵唔到用戶，麻煩再試多次或者聯絡客服幫手。",
-          id: "Pengguna tidak ditemukan. Silakan coba lagi atau hubungi layanan pelanggan untuk bantuan.",
+          en: "JOKER: Registration failed due to a technical issue. Please try again or contact customer support for assistance.",
+          zh: "JOKER: 由于技术问题注册失败。请重试或联系客服寻求帮助。",
+          ms: "JOKER: Pendaftaran gagal kerana masalah teknikal. Sila cuba lagi atau hubungi sokongan pelanggan untuk bantuan.",
+          zh_hk: "JOKER: 由於技術問題註冊失敗。請重試或聯絡客服尋求協助。",
+          id: "JOKER: Pendaftaran gagal karena masalah teknis. Silakan coba lagi atau hubungi dukungan pelanggan untuk bantuan.",
         },
       });
     }
-
-    const registerResponse = await registerJokerUser(user);
-
-    if (!registerResponse.success) {
-      return res.status(200).json({
-        success: false,
-        message: {
-          en: "JOKER: Registration failed. Please try again or contact customer support for further assistance.",
-          zh: "JOKER: 注册失败。请重试或联系客服寻求进一步帮助。",
-          ms: "JOKER: Pendaftaran gagal. Sila cuba lagi atau hubungi sokongan pelanggan untuk bantuan lanjut.",
-          zh_hk: "JOKER: 註冊失敗。請重試或聯絡客服尋求進一步協助。",
-          id: "JOKER: Pendaftaran gagal. Silakan coba lagi atau hubungi dukungan pelanggan untuk bantuan lebih lanjut.",
-        },
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: {
-        en: "JOKER: Account registered successfully.",
-        zh: "JOKER: 账户注册成功。",
-        ms: "JOKER: Akaun berjaya didaftarkan.",
-        zh_hk: "JOKER: 帳戶註冊成功。",
-        id: "JOKER: Akun berhasil didaftarkan.",
-      },
-      gameAccount: {
-        gameID: `${gameAPPID}.${user.gameId}`,
-        gamePW: gamePassword,
-      },
-    });
-  } catch (error) {
-    console.log("JOKER error fetching balance", error.message);
-    return res.status(200).json({
-      success: false,
-      message: {
-        en: "JOKER: Registration failed due to a technical issue. Please try again or contact customer support for assistance.",
-        zh: "JOKER: 由于技术问题注册失败。请重试或联系客服寻求帮助。",
-        ms: "JOKER: Pendaftaran gagal kerana masalah teknikal. Sila cuba lagi atau hubungi sokongan pelanggan untuk bantuan.",
-        zh_hk: "JOKER: 由於技術問題註冊失敗。請重試或聯絡客服尋求協助。",
-        id: "JOKER: Pendaftaran gagal karena masalah teknis. Silakan coba lagi atau hubungi dukungan pelanggan untuk bantuan.",
-      },
-    });
   }
-});
+);
 
 router.post("/api/joker/getbalance", authenticateToken, async (req, res) => {
   try {
