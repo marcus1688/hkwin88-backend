@@ -305,7 +305,7 @@ const userSchema = new mongoose.Schema(
       // habanero: { type: gameLockSchema, default: () => ({}) },
     },
     gameStatus: {
-      // pussy888: { type: gameStatusSchema, default: () => ({}) },
+      joker: { type: gameStatusSchema, default: () => ({}) },
       // mega888: { type: gameStatusSchema, default: () => ({}) },
       // xe88: { type: gameStatusSchema, default: () => ({}) },
       // kiss918: { type: gameStatusSchema, default: () => ({}) },
