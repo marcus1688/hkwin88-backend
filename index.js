@@ -20,7 +20,8 @@ const {
   authenticateAdminToken,
   generateToken: adminGenerateToken,
 } = require("./auth/adminAuth");
-
+const AttendanceBonusRouter = require("./routes/attendancebonus");
+const LoyaltyBonusRouter = require("./routes/loyaltybonus");
 const usersRouter = require("./routes/users");
 const depositRouter = require("./routes/deposit");
 const adminUserRouter = require("./routes/adminuser");
@@ -737,6 +738,8 @@ app.use(AgentPTRouter);
 app.use(FreeCreditRouter);
 app.use(FacebookRouter);
 app.use(GamelistRouter);
+app.use(AttendanceBonusRouter);
+app.use(LoyaltyBonusRouter);
 
 app.use(adminListRouter);
 app.use(notificationRouter);
