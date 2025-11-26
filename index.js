@@ -185,7 +185,6 @@ app.use((req, res, next) => {
 });
 
 const path = require("path");
-require("./services/maintenanceScheduler");
 
 app.use(
   cors({
