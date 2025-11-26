@@ -52,41 +52,6 @@ const Fingerprint = require("../models/fingerprint.model");
 const path = require("path");
 const { createCanvas, loadImage } = require("canvas");
 
-const SlotLivePPModal = require("../models/slot_live_pp_model");
-const liveWMCasinoModal = require("../models/live_wmcasino.model");
-const SlotLiveMicroGamingModal = require("../models/slot_live_microgaming.model");
-const LiveWeCasinoModal = require("../models/live_wecasino.model");
-const SlotApolloModal = require("../models/slot_apollo.model");
-const LiveYeebetModal = require("../models/live_yeebet.model");
-const SlotCQ9Modal = require("../models/slot_cq9.model");
-const SlotFachaiModal = require("../models/slot_fachai.model");
-const SlotFunkyModal = require("../models/slot_funky.model");
-const SlotHabaneroModal = require("../models/slot_habanero.model");
-const SlotJDBModal = require("../models/slot_jdb.model");
-const SlotJiliModal = require("../models/slot_jili.model");
-const SlotJokerModal = require("../models/slot_joker.model");
-const SlotLive22Modal = require("../models/slot_live22.model");
-const SlotSpadeGamingModal = require("../models/slot_spadegaming.model");
-const SportCMDModal = require("../models/sport_cmd.model");
-const SportsWsSportModal = require("../models/sport_wssport.model");
-const SportAFB1188Modal = require("../models/sports_Afb1188.model");
-const ESportIAGamingModal = require("../models/esport_iagaming.model");
-const EsportTfGamingModal = require("../models/esport_tfgaming.model");
-const otherHorsebookModal = require("../models/other_horsebook.model");
-const SlotClotplayModal = require("../models/slot_clotplay.model");
-const SlotEpicWinModal = require("../models/slot_epicwin.model");
-const OtherVGModal = require("../models/other_vg.model");
-const LiveAFBModal = require("../models/live_afb.model");
-const LiveEvolutionModal = require("../models/live_evolution.model");
-const SlotBNGModal = require("../models/slot_bng.model");
-const SlotKaGamingModal = require("../models/slot_kagaming.model");
-const SlotPegasusModal = require("../models/slot_pegasus.model");
-const SlotUUSlotModal = require("../models/slot_uuslot.model");
-const SlotKingMakerModal = require("../models/slot_kingmaker.model");
-const SlotLiveGSCModal = require("../models/slot_live_gsc.model");
-const SlotPGSoftModal = require("../models/slot_pgsoft.model");
-const liveSexybcrtModal = require("../models/live_sexybcrt.model");
-
 const dotenv = require("dotenv");
 const nodemailer = require("nodemailer");
 const mg = require("nodemailer-mailgun-transport");
@@ -430,22 +395,18 @@ async function updateUserReferral(
 }
 
 async function generateUniqueGameId() {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let result = "";
   let isUnique = false;
 
   while (!isUnique) {
-    result = "";
-    for (let i = 0; i < 7; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-
-    if (result.endsWith("2x")) {
-      continue;
-    }
+    result =
+      "A" +
+      Math.floor(Math.random() * 1000000)
+        .toString()
+        .padStart(6, "0");
 
     const existingUser = await User.findOne({
-      $or: [{ gameId: result }],
+      gameId: result,
     });
 
     if (!existingUser) {
@@ -455,6 +416,7 @@ async function generateUniqueGameId() {
 
   return result;
 }
+
 // Register User
 router.post("/api/register", async (req, res) => {
   const {
@@ -4507,206 +4469,10 @@ router.get(
       if (needsTodayData) {
         const todayGamePromises = [
           // Pragmatic Play (PP)
-          getAllUsersTurnover(SlotLivePPModal, {
-            refunded: false,
-            ended: true,
-          }),
-
-          // WM Casino
-          getAllUsersTurnover(liveWMCasinoModal, {
-            settle: true,
-          }),
-
-          // Microgaming
-          getAllUsersTurnover(SlotLiveMicroGamingModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          // WE Casino
-          getAllUsersTurnover(LiveWeCasinoModal, {
-            settle: true,
-            cancel: { $ne: true },
-          }),
-
-          // Apollo
-          getAllUsersTurnover(SlotApolloModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          // Yeebet
-          getAllUsersTurnover(LiveYeebetModal, {
-            settle: true,
-            cancel: { $ne: true },
-          }),
-
-          // CQ9
-          getAllUsersTurnover(SlotCQ9Modal, {
-            cancel: { $ne: true },
-            refund: { $ne: true },
-            settle: true,
-          }),
-
-          // Fachai
-          getAllUsersTurnover(SlotFachaiModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          // Funky
-          getAllUsersTurnover(SlotFunkyModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          // Habanero
-          getAllUsersTurnover(SlotHabaneroModal, {
-            refund: { $ne: true },
-            settle: true,
-          }),
-
-          // JDB
-          getAllUsersTurnover(SlotJDBModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          // Jili
-          getAllUsersTurnover(SlotJiliModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          // Joker
-          getAllUsersTurnover(SlotJokerModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          // Live22
-          getAllUsersTurnover(SlotLive22Modal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          // PGSlot
-          getAllUsersTurnover(SlotPGSoftModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          // Spade Gaming
-          getAllUsersTurnover(SlotSpadeGamingModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          // CMD368
-          getAllUsersTurnover(SportCMDModal, {
-            cancel: { $ne: true },
-          }),
-
-          // WS Sport
-          getAllUsersTurnover(SportsWsSportModal, {}),
-
-          // AFB1188 (with special turnover calculation)
-          getAllUsersTurnover(SportAFB1188Modal, {
-            cancelroute: { $ne: true },
-          }),
-
-          // IA Gaming
-          getAllUsersTurnover(ESportIAGamingModal, {
-            cancel: { $ne: true },
-          }),
-
-          // TF Gaming
-          getAllUsersTurnover(EsportTfGamingModal, {
-            settle: true,
-            cancel: { $ne: true },
-          }),
-
-          // Horsebook
-          getAllUsersTurnover(otherHorsebookModal, {
-            platform: "HORSEBOOK",
-            $and: [
-              { $or: [{ cancel: false }, { cancel: { $exists: false } }] },
-              { $or: [{ void: false }, { void: { $exists: false } }] },
-              { $or: [{ refunded: false }, { refunded: { $exists: false } }] },
-              { $or: [{ tip: false }, { tip: { $exists: false } }] },
-            ],
-            remark: { $ne: "Tip has been cancelled" },
-          }),
-
-          // ClotPlay
-          getAllUsersTurnover(SlotClotplayModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          // EpicWin
-          getAllUsersTurnover(SlotEpicWinModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          // VG Qipai (with special turnover and winloss calculation)
-          getAllUsersTurnover(OtherVGModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          // AFB Live
-          getAllUsersTurnover(LiveAFBModal, {
-            cancel: { $ne: true },
-            tip: { $ne: true },
-            settle: true,
-          }),
-
-          // Evolution
-          getAllUsersTurnover(LiveEvolutionModal, {
-            settle: true,
-            cancel: { $ne: true },
-          }),
-
-          getAllUsersTurnover(SlotBNGModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          getAllUsersTurnover(SlotKaGamingModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          // Pegasus
-          getAllUsersTurnover(SlotPegasusModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          getAllUsersTurnover(SlotUUSlotModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          getAllUsersTurnover(SlotKingMakerModal, {}),
-
-          getAllUsersTurnover(SlotLiveGSCModal, {
-            cancel: { $ne: true },
-            settle: true,
-          }),
-
-          getAllUsersTurnover(liveSexybcrtModal, {
-            platform: "SEXYBCRT",
-            $and: [
-              { $or: [{ cancel: false }, { cancel: { $exists: false } }] },
-              { $or: [{ void: false }, { void: { $exists: false } }] },
-              { $or: [{ refunded: false }, { refunded: { $exists: false } }] },
-              { $or: [{ tip: false }, { tip: { $exists: false } }] },
-            ],
-            remark: { $ne: "Tip has been cancelled" },
-          }),
+          // getAllUsersTurnover(SlotLivePPModal, {
+          //   refunded: false,
+          //   ended: true,
+          // }),
         ];
 
         const todayGameResults = await Promise.allSettled(todayGamePromises);

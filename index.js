@@ -71,69 +71,9 @@ const GamelistRouter = require("./routes/gamelist");
 const adminListRouter = require("./routes/adminlist");
 const notificationRouter = require("./routes/notification");
 
+const slotJokerRouter = require("./routes/GAMEAPI/slotjoker");
+
 const { resetCheckinStreaks } = require("./routes/checkin");
-
-const slotliveGSCRouter = require("./routes/GAMEAPI/allGSI");
-const slotlivePPRouter = require("./routes/GAMEAPI/slot_livepp");
-const slotCQ9Router = require("./routes/GAMEAPI/slotcq9");
-const slotHabaneroRouter = require("./routes/GAMEAPI/slothabanero");
-const slotlive22Router = require("./routes/GAMEAPI/slotlive22");
-const slotFachaiRouter = require("./routes/GAMEAPI/slotfachai");
-const slotSpadeGamingRouter = require("./routes/GAMEAPI/slotspadegaming");
-const slotFunkyRouter = require("./routes/GAMEAPI/slotfunky");
-const slotJokerRouter = require("./routes/GAMEAPI/slotjoker.model");
-const slotKaGamingRouter = require("./routes/GAMEAPI/slotkagaming");
-const slotJiliRouter = require("./routes/GAMEAPI/slotjili");
-const slotJDBRouter = require("./routes/GAMEAPI/slotjdb");
-const slotLiveMicroGamingRouter = require("./routes/GAMEAPI/slot_livemicrogaming");
-const slotApolloRouter = require("./routes/GAMEAPI/slotapollo");
-const slotClotPlayRouter = require("./routes/GAMEAPI/slotclotplay");
-const slotEpicWinRouter = require("./routes/GAMEAPI/slotepicwin");
-const slotBNGRouter = require("./routes/GAMEAPI/slotbng");
-const slotPegasusRouter = require("./routes/GAMEAPI/slotpegasus");
-const slotKingMakerRouter = require("./routes/GAMEAPI/slotkingmaker");
-const slotUUSlotRouter = require("./routes/GAMEAPI/slotuuslot");
-const slotPGSlotRouter = require("./routes/GAMEAPI/slotpgslot");
-const slotRSGRouter = require("./routes/GAMEAPI/slotrsg");
-
-const liveYeebetRouter = require("./routes/GAMEAPI/liveyeebet");
-const liveEvolutionRouter = require("./routes/GAMEAPI/liveevolution");
-const liveWmCasinoRouter = require("./routes/GAMEAPI/livewmcasino");
-const liveWeCasinoRouter = require("./routes/GAMEAPI/livewecasino");
-const liveAFBRouter = require("./routes/GAMEAPI/slot_live_afb");
-const liveDreamGamingRouter = require("./routes/GAMEAPI/livedreamgaming");
-const liveSexybcrtRouter = require("./routes/GAMEAPI/livesexybcrt");
-
-const otherHorsebookRouter = require("./routes/GAMEAPI/otherhorsebook");
-const otherVGRouter = require("./routes/GAMEAPI/othervgqipai");
-
-const esportIAGamingRouter = require("./routes/GAMEAPI/esportiagaming");
-const esportTFGamingRouter = require("./routes/GAMEAPI/esporttfgaming");
-
-const sportCMD368Router = require("./routes/GAMEAPI/sportcmd");
-const sportWssportRouter = require("./routes/GAMEAPI/sportwssport");
-const sportAFB1188Router = require("./routes/GAMEAPI/sportafb");
-const sportM9BETRouter = require("./routes/GAMEAPI/sportm9bet");
-
-const paymentgatewayEasyPayRouter = require("./routes/PaymentGateway/easypay");
-const paymentgatewayLMWPayRouter = require("./routes/PaymentGateway/lmwpay");
-
-const allImportGameRouter = require("./routes/GAMEAPI/0_ImportGameList");
-const allGameStatus = require("./routes/GAMEAPI/0_GameStatus");
-const GameFunction = require("./routes/GAMEAPI/0_GameFunction");
-const gameTurnoverRouter = require("./routes/GAMEAPI/0_GameTotalTurnover");
-const ezwin9GameRouter = require("./routes/GAMEAPI/0_Ezwin9Function");
-
-const {
-  processWsSportTickets,
-  processAFB1188Bets,
-  processCMD368Bets,
-} = require("./services/sportsData");
-
-const {
-  processWMCasinoRecords,
-  processAFBRecords,
-} = require("./services/liveCasinoData");
 
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -801,102 +741,9 @@ app.use(GamelistRouter);
 app.use(adminListRouter);
 app.use(notificationRouter);
 
-app.use(myPromotionRouter);
-
-app.use(slotliveGSCRouter);
-app.use(slotlivePPRouter);
-app.use(slotCQ9Router);
-app.use(slotHabaneroRouter);
-app.use(slotlive22Router);
-app.use(slotFachaiRouter);
-app.use(slotSpadeGamingRouter);
-app.use(slotFunkyRouter);
 app.use(slotJokerRouter);
-app.use(slotKaGamingRouter);
-app.use(slotJiliRouter);
-app.use(slotJDBRouter);
-app.use(slotLiveMicroGamingRouter);
-app.use(slotApolloRouter);
-app.use(slotClotPlayRouter);
-app.use(slotEpicWinRouter);
-app.use(slotBNGRouter);
-app.use(slotPegasusRouter);
-app.use(slotKingMakerRouter);
-app.use(slotUUSlotRouter);
-app.use(slotPGSlotRouter);
-app.use(slotRSGRouter);
 
-app.use(liveYeebetRouter);
-app.use(liveEvolutionRouter);
-app.use(liveWmCasinoRouter);
-app.use(liveWeCasinoRouter);
-app.use(liveAFBRouter);
-app.use(liveDreamGamingRouter);
-app.use(liveSexybcrtRouter);
-
-app.use(otherHorsebookRouter);
-app.use(otherVGRouter);
-
-app.use(esportIAGamingRouter);
-app.use(esportTFGamingRouter);
-
-app.use(sportCMD368Router);
-app.use(sportWssportRouter);
-app.use(sportAFB1188Router);
-app.use(sportM9BETRouter);
-
-app.use(paymentgatewayEasyPayRouter);
-app.use(paymentgatewayLMWPayRouter);
-
-app.use(allImportGameRouter);
-app.use(allGameStatus);
-app.use(GameFunction);
-app.use(gameTurnoverRouter);
-app.use(ezwin9GameRouter);
-
-// const modelsToUpdate = [
-//   "SportWBETModal",
-//   "SportWBETRecordModal",
-//   "SportsWsSportModal",
-// ];
-
-// const newExpireAfterSeconds = 432000;
-
-// // Route to update all schemas
-// const updateExpirationIndexes = async (
-//   expirationTime = newExpireAfterSeconds
-// ) => {
-//   try {
-//     for (const modelName of modelsToUpdate) {
-//       const model = mongoose.model(modelName);
-
-//       // Drop the existing index to avoid conflicts
-//       await model.collection.dropIndex({ createdAt: -1 }).catch((err) => {
-//         if (err.code !== 27) {
-//           // 27 means the index wasn't found, so it can be ignored
-//           console.error(`Error dropping index for ${modelName}:`, err);
-//         }
-//       });
-
-//       // Recreate the index with updated expiration time
-//       await model.collection.createIndex(
-//         { createdAt: -1 },
-//         { expireAfterSeconds: expirationTime }
-//       );
-
-//       console.log(
-//         `Index updated for ${modelName} with expiration time: ${expirationTime} seconds.`
-//       );
-//     }
-
-//     console.log(
-//       `✅ Expiration updated to ${expirationTime} seconds for all specified models.`
-//     );
-//   } catch (error) {
-//     console.error("❌ Error updating expiration indexes:", error);
-//   }
-// };
-// updateExpirationIndexes();
+app.use(myPromotionRouter);
 
 app.use("*", (req, res) => {
   res.status(404).json({

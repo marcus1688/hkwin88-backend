@@ -302,42 +302,7 @@ const userSchema = new mongoose.Schema(
     lastAdminAccess: { type: Date, default: null },
     lastAdminAccessBy: String,
     gameLock: {
-      habanero: { type: gameLockSchema, default: () => ({}) },
-      cq9: { type: gameLockSchema, default: () => ({}) },
-      pp: { type: gameLockSchema, default: () => ({}) },
-      live22: { type: gameLockSchema, default: () => ({}) },
-      fachai: { type: gameLockSchema, default: () => ({}) },
-      spadegaming: { type: gameLockSchema, default: () => ({}) },
-      funky: { type: gameLockSchema, default: () => ({}) },
-      joker: { type: gameLockSchema, default: () => ({}) },
-      rcb988: { type: gameLockSchema, default: () => ({}) },
-      iaesport: { type: gameLockSchema, default: () => ({}) },
-      tfgaming: { type: gameLockSchema, default: () => ({}) },
-      yeebet: { type: gameLockSchema, default: () => ({}) },
-      jili: { type: gameLockSchema, default: () => ({}) },
-      cmd368: { type: gameLockSchema, default: () => ({}) },
-      jdb: { type: gameLockSchema, default: () => ({}) },
-      wssport: { type: gameLockSchema, default: () => ({}) },
-      afb1188: { type: gameLockSchema, default: () => ({}) },
-      wmcasino: { type: gameLockSchema, default: () => ({}) },
-      wecasino: { type: gameLockSchema, default: () => ({}) },
-      microgaming: { type: gameLockSchema, default: () => ({}) },
-      afb: { type: gameLockSchema, default: () => ({}) },
-      apollo: { type: gameLockSchema, default: () => ({}) },
-      clotplay: { type: gameLockSchema, default: () => ({}) },
-      evolution: { type: gameLockSchema, default: () => ({}) },
-      epicwin: { type: gameLockSchema, default: () => ({}) },
-      dreamgaming: { type: gameLockSchema, default: () => ({}) },
-      m9bet: { type: gameLockSchema, default: () => ({}) },
-      vgqipai: { type: gameLockSchema, default: () => ({}) },
-      bng: { type: gameLockSchema, default: () => ({}) },
-      kagaming: { type: gameLockSchema, default: () => ({}) },
-      pegasus: { type: gameLockSchema, default: () => ({}) },
-      kingmaker: { type: gameLockSchema, default: () => ({}) },
-      uuslot: { type: gameLockSchema, default: () => ({}) },
-      gsi: { type: gameLockSchema, default: () => ({}) },
-      pgslot: { type: gameLockSchema, default: () => ({}) },
-      sexybcrt: { type: gameLockSchema, default: () => ({}) },
+      // habanero: { type: gameLockSchema, default: () => ({}) },
     },
     gameStatus: {
       // pussy888: { type: gameStatusSchema, default: () => ({}) },
@@ -354,66 +319,10 @@ const userSchema = new mongoose.Schema(
       type: userLuckySpinSettingSchema,
       default: () => ({ settings: [], remainingCount: 0 }),
     },
-    habaneroGameToken: {
+    jokerGameName: {
       type: String,
     },
-    ppGameToken: {
-      type: String,
-    },
-    live22GameToken: {
-      type: String,
-    },
-    epicwinGameToken: {
-      type: String,
-    },
-    jiliGameToken: {
-      type: String,
-    },
-    jokerGameToken: {
-      type: String,
-    },
-    tfGamingGameToken: {
-      type: String,
-    },
-    cmd368GameToken: {
-      type: String,
-    },
-    wmCasinoGamePW: {
-      type: String,
-    },
-    weCasinoGameToken: {
-      type: String,
-    },
-    pegasusGameToken: {
-      type: String,
-    },
-    microGamingGameToken: {
-      type: String,
-    },
-    apolloGameToken: {
-      type: String,
-    },
-    evolutionGameTokens: {
-      type: Map,
-      of: String,
-      default: new Map(),
-    },
-    m9betRegistered: {
-      type: Boolean,
-      default: false,
-    },
-    vgRegistered: {
-      type: Boolean,
-      default: false,
-    },
-    bngGameToken: {
-      type: String,
-    },
-    bngbalanceVersion: {
-      type: Number,
-      default: 0,
-    },
-    uuslotGameToken: {
+    jokerGamePW: {
       type: String,
     },
   },
