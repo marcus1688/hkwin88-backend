@@ -430,7 +430,7 @@ router.post(
 );
 
 router.post(
-  "/api/joker/deposit/:userId",
+  "/admin/api/joker/deposit/:userId",
   authenticateAdminToken,
   async (req, res) => {
     let formattedDepositAmount = 0;
