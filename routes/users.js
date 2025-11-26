@@ -2979,7 +2979,7 @@ router.post(
         },
       });
     }
-    const normalizedUsername = username.toLowerCase();
+    const normalizedUsername = fullname.toLowerCase().replace(/\s+/g, "");
     const normalizedFullname = fullname.toLowerCase().replace(/\s+/g, "");
     const formattedNumber = String(phonenumber).startsWith("852")
       ? String(phonenumber)
@@ -3079,8 +3079,6 @@ router.post(
       for (const kiosk of kiosks) {
         try {
           const url = `${API_URL}${kiosk.registerGameAPI}/${newUser._id}`;
-          console.log(`[Register] Calling URL: ${url}`);
-
           const response = await fetch(url, {
             method: "POST",
             headers: {
@@ -3089,16 +3087,9 @@ router.post(
             },
             body: JSON.stringify({}),
           });
-
           const text = await response.text();
-          console.log(`[Register] ${kiosk.name} response:`, text);
-
           try {
             const result = JSON.parse(text);
-            console.log(
-              `[Register] ${kiosk.name} - ${normalizedUsername}:`,
-              result
-            );
           } catch (parseError) {
             console.error(`[Register] ${kiosk.name} - Invalid JSON response`);
           }

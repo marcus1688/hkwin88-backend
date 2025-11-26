@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { Kiosk } = require("../models/kiosk.model");
+const { User } = require("../models/users.model");
 const { authenticateAdminToken } = require("../auth/adminAuth");
 const multer = require("multer");
 const upload = multer({ storage: multer.memoryStorage() });
@@ -662,5 +663,82 @@ router.get("/admin/api/kiosk/backend-link/:gameName", async (req, res) => {
     });
   }
 });
+
+// Check All Kiosk Balances + User Kiosk IDs
+router.post(
+  "/admin/api/kiosk/check-all-balances",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { userId } = req.body;
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User not found",
+            zh: "找不到用户",
+          },
+        });
+      }
+      const kiosks = await Kiosk.find({
+        isActive: true,
+        transferInAPI: { $exists: true, $ne: "" },
+      });
+      const kioskData = await Promise.all(
+        kiosks.map(async (kiosk) => {
+          let balance = 0;
+          let userKioskId = "";
+          if (kiosk.databaseGameID) {
+            userKioskId = user[kiosk.databaseGameID] || "";
+          }
+          const API_URL = process.env.API_URL || "http://localhost:3001/api/";
+          if (kiosk.balanceAPI) {
+            try {
+              const response = await fetch(
+                `${API_URL}${kiosk.balanceAPI}/${user._id}`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: req.headers.authorization,
+                  },
+                  body: JSON.stringify({}),
+                }
+              );
+              const result = await response.json();
+              balance = result.balance || result.data?.balance || 0;
+            } catch (error) {
+              console.error(`Error fetching balance for ${kiosk.name}:`, error);
+              balance = 0;
+            }
+          }
+          return {
+            _id: kiosk._id,
+            name: kiosk.name,
+            balance,
+            userKioskId,
+            transferInAPI: kiosk.transferInAPI,
+            balanceAPI: kiosk.balanceAPI,
+            databaseGameID: kiosk.databaseGameID,
+          };
+        })
+      );
+      res.status(200).json({
+        success: true,
+        data: kioskData,
+      });
+    } catch (error) {
+      console.error("Error checking all kiosk balances:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
 
 module.exports = router;
