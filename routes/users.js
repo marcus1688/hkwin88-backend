@@ -394,22 +394,18 @@ async function updateUserReferral(
 }
 
 async function generateUniqueGameId() {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let result = "";
   let isUnique = false;
 
   while (!isUnique) {
-    result = "";
-    for (let i = 0; i < 7; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-
-    if (result.endsWith("2x")) {
-      continue;
-    }
+    result =
+      "A" +
+      Math.floor(Math.random() * 1000000)
+        .toString()
+        .padStart(6, "0");
 
     const existingUser = await User.findOne({
-      $or: [{ gameId: result }],
+      gameId: result,
     });
 
     if (!existingUser) {
@@ -419,6 +415,7 @@ async function generateUniqueGameId() {
 
   return result;
 }
+
 // Register User
 router.post("/api/register", async (req, res) => {
   const {

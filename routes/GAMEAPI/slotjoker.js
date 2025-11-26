@@ -21,6 +21,7 @@ const gameAPIURL = "https://w.apiext88.net";
 const webURL = "https://www.hkwin88.com/";
 const gameAPPID = "FTXS";
 const gameKEY = process.env.JOKER_SECRET;
+const gamePassword = "Qwer1122";
 
 function generateSignature(fields, secretKey) {
   const data = [];
@@ -37,14 +38,15 @@ function generateSignature(fields, secretKey) {
   return hmac.digest("base64");
 }
 
-async function registerJokerUser(username) {
+async function setJokerPassword(username) {
   try {
     const timestamp = moment().unix();
 
     const fields = {
-      Method: "CU",
+      Method: "SP",
       //   Username: user.username,
-      Username: username,
+      Username: "HIHI",
+      Password: gamePassword,
       Timestamp: timestamp,
     };
 
@@ -78,5 +80,46 @@ async function registerJokerUser(username) {
     };
   }
 }
-registerJokerUser("hihi");
+async function registerJokerUser(username) {
+  try {
+    const timestamp = moment().unix();
+
+    const fields = {
+      Method: "CU",
+      //   Username: user.username,
+      Username: username,
+      Timestamp: timestamp,
+    };
+
+    const Signature = generateSignature(fields, gameKEY);
+
+    const response = await axios.post(
+      `${gameAPIURL}?appid=${gameAPPID}&signature=${encodeURIComponent(
+        Signature
+      )}`,
+      fields,
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    console.log(response.data);
+    if (response.data.Status !== "Created" && response.data.Status !== "OK") {
+      return { success: true };
+    }
+
+    return {
+      success: false,
+      error: response.data,
+    };
+  } catch (error) {
+    console.error("JOKER error in creating member:", error.message);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
+
 module.exports = router;
