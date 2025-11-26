@@ -2,7 +2,6 @@ const express = require("express");
 const router = express.Router();
 const { Kiosk } = require("../models/kiosk.model");
 const { authenticateAdminToken } = require("../auth/adminAuth");
-const { updateSchedules } = require("../services/maintenanceScheduler");
 const multer = require("multer");
 const upload = multer({ storage: multer.memoryStorage() });
 const {
@@ -511,7 +510,6 @@ router.put(
         kiosk.isActive = false;
       }
       await kiosk.save();
-      await updateSchedules();
       res.status(200).json({
         success: true,
         message: {
@@ -553,7 +551,6 @@ router.delete(
         activateAt: null,
       };
       await kiosk.save();
-      await updateSchedules();
       res.status(200).json({
         success: true,
         message: {

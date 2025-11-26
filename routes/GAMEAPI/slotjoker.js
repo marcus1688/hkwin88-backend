@@ -315,7 +315,6 @@ router.post(
     try {
       const { userId } = req.params;
       const user = await User.findById(userId);
-
       if (!user) {
         return res.status(200).json({
           success: false,
@@ -330,7 +329,6 @@ router.post(
       }
 
       const registerResponse = await registerJokerUser(user);
-
       if (!registerResponse.success) {
         return res.status(200).json({
           success: false,

@@ -3074,16 +3074,34 @@ router.post(
         registerGameAPI: { $exists: true, $ne: "" },
       });
 
-      const BASE_URL = process.env.BASE_URL || "http://localhost:3001/";
+      const API_URL = process.env.API_URL || "http://localhost:3001/api/";
 
       for (const kiosk of kiosks) {
         try {
-          await fetch(`${BASE_URL}${kiosk.registerGameAPI}/${User._id}`, {
+          const url = `${API_URL}${kiosk.registerGameAPI}/${newUser._id}`;
+          console.log(`[Register] Calling URL: ${url}`);
+
+          const response = await fetch(url, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              Authorization: req.headers.authorization,
             },
+            body: JSON.stringify({}),
           });
+
+          const text = await response.text();
+          console.log(`[Register] ${kiosk.name} response:`, text);
+
+          try {
+            const result = JSON.parse(text);
+            console.log(
+              `[Register] ${kiosk.name} - ${normalizedUsername}:`,
+              result
+            );
+          } catch (parseError) {
+            console.error(`[Register] ${kiosk.name} - Invalid JSON response`);
+          }
         } catch (error) {
           console.error(`[Register] ${kiosk.name} error:`, error.message);
         }
