@@ -65,7 +65,7 @@ const GAME_BALANCE_CHECKERS = [
 ];
 
 router.post(
-  "/admin/api/allgame/balance/:userId",
+  "/api/allgame/balance/:userId",
   authenticateAdminToken,
   async (req, res) => {
     try {
