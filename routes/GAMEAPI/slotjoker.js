@@ -430,7 +430,7 @@ router.post(
 );
 
 router.post(
-  "/admin/api/joker/deposit/:userId",
+  "/api/joker/deposit/:userId",
   authenticateAdminToken,
   async (req, res) => {
     let formattedDepositAmount = 0;
@@ -734,6 +734,190 @@ router.post(
           ms: "JOKER: Gagal mengemas kini kata laluan kerana masalah teknikal. Sila cuba lagi atau hubungi sokongan pelanggan untuk bantuan.",
           zh_hk: "JOKER: 由於技術問題更新密碼失敗。請重試或聯絡客服尋求協助。",
           id: "JOKER: Gagal memperbarui kata sandi karena masalah teknis. Silakan coba lagi atau hubungi dukungan pelanggan untuk bantuan.",
+        },
+      });
+    }
+  }
+);
+
+router.get(
+  "/api/joker/dailygamedata/:playerId",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+
+      const playerId = req.params.playerId;
+      const currentPlayer = await User.findById(playerId);
+
+      if (!currentPlayer) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User not found. Please try again or contact customer service for assistance.",
+            zh: "用户未找到，请重试或联系客服以获取帮助。",
+            ms: "Pengguna tidak ditemui, sila cuba lagi atau hubungi khidmat pelanggan untuk bantuan.",
+            zh_hk: "搵唔到用戶，麻煩再試多次或者聯絡客服幫手。",
+            id: "Pengguna tidak ditemukan. Silakan coba lagi atau hubungi layanan pelanggan untuk bantuan.",
+          },
+        });
+      }
+
+      const start = moment(new Date(startDate))
+        .utc()
+        .add(8, "hours")
+        .format("YYYY-MM-DD");
+
+      const end = moment(new Date(endDate))
+        .utc()
+        .add(8, "hours")
+        .format("YYYY-MM-DD");
+
+      const timestamp = moment().unix();
+
+      const fields = {
+        Method: "RWL",
+        StartDate: start,
+        EndDate: end,
+        Username: currentPlayer.gameId,
+        Timestamp: timestamp,
+      };
+
+      const signature = generateSignature(fields, gameKEY);
+
+      const response = await axios.post(
+        `${gameAPIURL}?appid=${gameAPPID}&signature=${encodeURIComponent(
+          signature
+        )}`,
+        fields,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const totalTurnover = response.data.Winloss.reduce(
+        (sum, record) => sum + record.Amount,
+        0
+      );
+      const totalWin = response.data.Winloss.reduce(
+        (sum, record) => sum + record.Result,
+        0
+      );
+      const winloss = totalTurnover - totalWin;
+
+      return res.status(200).json({
+        success: true,
+        summary: {
+          gamename: "JOKER",
+          gamecategory: "Slot Games",
+          user: {
+            username: currentPlayer.username,
+            turnover: roundToTwoDecimals(totalTurnover),
+            winloss: roundToTwoDecimals(winloss),
+          },
+        },
+      });
+    } catch (error) {
+      console.log("JOKER: Failed to fetch win/loss report:", error.message);
+      return res.status(500).json({
+        success: false,
+        message: {
+          en: "JOKER: Failed to fetch win/loss report",
+          zh: "JOKER: 获取盈亏报告失败",
+        },
+      });
+    }
+  }
+);
+
+router.get(
+  "/api/joker/kioskreport",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+
+      const playerId = req.params.playerId;
+      const currentPlayer = await User.findById(playerId);
+
+      if (!currentPlayer) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User not found. Please try again or contact customer service for assistance.",
+            zh: "用户未找到，请重试或联系客服以获取帮助。",
+            ms: "Pengguna tidak ditemui, sila cuba lagi atau hubungi khidmat pelanggan untuk bantuan.",
+            zh_hk: "搵唔到用戶，麻煩再試多次或者聯絡客服幫手。",
+            id: "Pengguna tidak ditemukan. Silakan coba lagi atau hubungi layanan pelanggan untuk bantuan.",
+          },
+        });
+      }
+
+      const start = moment(new Date(startDate))
+        .utc()
+        .add(8, "hours")
+        .format("YYYY-MM-DD");
+
+      const end = moment(new Date(endDate))
+        .utc()
+        .add(8, "hours")
+        .format("YYYY-MM-DD");
+
+      const timestamp = moment().unix();
+
+      const fields = {
+        Method: "RWL",
+        StartDate: start,
+        EndDate: end,
+        Username: currentPlayer.gameId,
+        Timestamp: timestamp,
+      };
+
+      const signature = generateSignature(fields, gameKEY);
+
+      const response = await axios.post(
+        `${gameAPIURL}?appid=${gameAPPID}&signature=${encodeURIComponent(
+          signature
+        )}`,
+        fields,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const totalTurnover = response.data.Winloss.reduce(
+        (sum, record) => sum + record.Amount,
+        0
+      );
+      const totalWin = response.data.Winloss.reduce(
+        (sum, record) => sum + record.Result,
+        0
+      );
+      const winloss = totalTurnover - totalWin;
+
+      return res.status(200).json({
+        success: true,
+        summary: {
+          gamename: "JOKER",
+          gamecategory: "Slot Games",
+          user: {
+            username: currentPlayer.username,
+            turnover: roundToTwoDecimals(totalTurnover),
+            winloss: roundToTwoDecimals(winloss),
+          },
+        },
+      });
+    } catch (error) {
+      console.log("JOKER: Failed to fetch win/loss report:", error.message);
+      return res.status(500).json({
+        success: false,
+        message: {
+          en: "JOKER: Failed to fetch win/loss report",
+          zh: "JOKER: 获取盈亏报告失败",
         },
       });
     }
