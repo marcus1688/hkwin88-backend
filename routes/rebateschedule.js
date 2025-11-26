@@ -34,39 +34,6 @@ function getNextRunTime(hour, minute) {
   return nextRun.format("YYYY-MM-DD HH:mm:ss");
 }
 
-// 每天3点Rebate
-if (process.env.NODE_ENV !== "development") {
-  cron.schedule(
-    "0 3 * * *",
-    async () => {
-      console.log(
-        `Starting rebate calculation at: ${new Date().toISOString()}`
-      );
-      try {
-        await runRebateCalculation();
-        await RebateSchedule.findOneAndUpdate({}, { lastRunTime: new Date() });
-        console.log(
-          `Rebate calculation completed successfully at: ${new Date().toISOString()}`
-        );
-      } catch (error) {
-        console.error(
-          `Rebate calculation error at ${new Date().toISOString()}:`,
-          error
-        );
-      }
-    },
-    {
-      scheduled: true,
-      timezone: "Asia/Kuala_Lumpur",
-    }
-  );
-  console.log(
-    `Rebate calculation job scheduled for 3:00 AM (Asia/Kuala_Lumpur). Next run: ${getNextRunTime(
-      3,
-      0
-    )}`
-  );
-}
 // Admin Get Rebate Report
 router.get(
   "/admin/api/rebate-report",

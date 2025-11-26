@@ -41,46 +41,6 @@ function getNextRunTime(hour, minute, dayOfWeek) {
   return nextRun.format("YYYY-MM-DD HH:mm:ss");
 }
 
-// 每周1早上6点Commission
-if (process.env.NODE_ENV !== "development") {
-  cron.schedule(
-    "0 6 * * 1",
-    async () => {
-      try {
-        const currentTime = moment()
-          .tz(USER_TIMEZONE)
-          .format("YYYY-MM-DD HH:mm:ss");
-        console.log(
-          `Running commission calculation at ${currentTime} (${USER_TIMEZONE})`
-        );
-        await runCommissionCalculation();
-        await AgentCommission.findOneAndUpdate({}, { lastRunTime: new Date() });
-        console.log(
-          `Commission calculation completed successfully at ${moment()
-            .tz(USER_TIMEZONE)
-            .format("YYYY-MM-DD HH:mm:ss")}`
-        );
-      } catch (error) {
-        console.error(
-          `Commission calculation error at ${new Date().toISOString()}:`,
-          error
-        );
-      }
-    },
-    {
-      scheduled: true,
-      timezone: USER_TIMEZONE,
-    }
-  );
-  console.log(
-    `Commission job scheduled for every Monday 6:00 AM (${USER_TIMEZONE}). Next run: ${getNextRunTime(
-      6,
-      0,
-      1
-    )}`
-  );
-}
-
 function roundToTwoDecimals(num) {
   return Math.round(num * 100) / 100;
 }
