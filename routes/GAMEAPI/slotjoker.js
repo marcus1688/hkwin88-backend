@@ -198,14 +198,14 @@ async function JokerWithdraw(user, trfamount) {
   }
 }
 
-async function setJokerPassword(user) {
+async function setJokerPassword(user, password) {
   try {
     const timestamp = moment().unix();
 
     const fields = {
       Method: "SP",
       Username: user.gameId,
-      Password: gamePassword,
+      Password: password,
       Timestamp: timestamp,
     };
 
@@ -234,12 +234,12 @@ async function setJokerPassword(user) {
       { username: user.username },
       {
         $set: {
-          jokerGamePW: gamePassword,
+          jokerGamePW: password,
         },
       }
     );
 
-    return { success: true, data: response.data, password: gamePassword };
+    return { success: true, data: response.data, password: password };
   } catch (error) {
     console.error("JOKER error in setting password:", error.message);
     return {
@@ -288,7 +288,7 @@ async function registerJokerUser(user) {
       }
     );
 
-    const setPasswordResponse = await setJokerPassword(user);
+    const setPasswordResponse = await setJokerPassword(user, gamePassword);
 
     if (!setPasswordResponse.success) {
       console.log("failed to set password for user", setPasswordResponse);
@@ -666,3 +666,4 @@ router.post(
 
 module.exports = router;
 module.exports.registerJokerUser = registerJokerUser;
+module.exports.JokerCheckBalance = JokerCheckBalance;
