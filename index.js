@@ -75,6 +75,7 @@ const notificationRouter = require("./routes/notification");
 const slotJokerRouter = require("./routes/GAMEAPI/slotjoker");
 
 const ALLGameFunctionRouter = require("./routes/GAMEAPI/0_GameFunction");
+const ALLGameStatusRouter = require("./routes/GAMEAPI/0_GameStatus");
 
 const { resetCheckinStreaks } = require("./routes/checkin");
 
@@ -748,6 +749,7 @@ app.use(notificationRouter);
 app.use(slotJokerRouter);
 
 app.use(ALLGameFunctionRouter);
+app.use(ALLGameStatusRouter);
 
 app.use(myPromotionRouter);
 

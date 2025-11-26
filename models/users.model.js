@@ -310,6 +310,9 @@ const userSchema = new mongoose.Schema(
       // xe88: { type: gameStatusSchema, default: () => ({}) },
       // kiss918: { type: gameStatusSchema, default: () => ({}) },
     },
+    gameSuspendStatus: {
+      joker: { type: gameLockSchema, default: () => ({}) },
+    },
     lastForcedLogout: { type: Date, default: null },
     luckySpinCount: {
       type: Number,

@@ -741,12 +741,11 @@ router.post(
 );
 
 router.get(
-  "/api/joker/dailygamedata/:playerId",
-  // authenticateAdminToken,
+  "/admin/api/joker/:playerId/dailygamedata",
+  authenticateAdminToken,
   async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
-
       const playerId = req.params.playerId;
       const currentPlayer = await User.findById(playerId);
 
@@ -833,8 +832,8 @@ router.get(
 );
 
 router.get(
-  "/api/joker/kioskreport",
-  // authenticateAdminToken,
+  "/admin/api/joker/kioskreport",
+  authenticateAdminToken,
   async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
@@ -898,6 +897,188 @@ router.get(
         message: {
           en: "JOKER: Failed to fetch win/loss report",
           zh: "JOKER: 获取盈亏报告失败",
+        },
+      });
+    }
+  }
+);
+
+router.get(
+  "/api/joker/setstatus/:playerId",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { status } = req.body;
+      const playerId = req.params.playerId;
+      const currentPlayer = await User.findById(playerId);
+
+      if (!currentPlayer) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User not found. Please try again or contact customer service for assistance.",
+            zh: "用户未找到，请重试或联系客服以获取帮助。",
+            ms: "Pengguna tidak ditemui, sila cuba lagi atau hubungi khidmat pelanggan untuk bantuan.",
+            zh_hk: "搵唔到用戶，麻煩再試多次或者聯絡客服幫手。",
+            id: "Pengguna tidak ditemukan. Silakan coba lagi atau hubungi layanan pelanggan untuk bantuan.",
+          },
+        });
+      }
+
+      const jokerStatus = status === true ? "Active" : "Suspend";
+
+      const timestamp = moment().unix();
+
+      const fields = {
+        Method: "SS",
+        Username: currentPlayer.gameId,
+        Status: jokerStatus,
+        Timestamp: timestamp,
+      };
+
+      const signature = generateSignature(fields, gameKEY);
+
+      const response = await axios.post(
+        `${gameAPIURL}?appid=${gameAPPID}&signature=${encodeURIComponent(
+          signature
+        )}`,
+        fields,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.data.Status !== "OK") {
+        console.log("failed to update status", response.data);
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "JOKER: Failed to update player status. Please try again or contact customer support.",
+            zh: "JOKER: 更新玩家状态失败。请重试或联系客服。",
+            ms: "JOKER: Gagal mengemas kini status pemain. Sila cuba lagi atau hubungi sokongan pelanggan.",
+            zh_hk: "JOKER: 更新玩家狀態失敗。請重試或聯絡客服。",
+            id: "JOKER: Gagal memperbarui status pemain. Silakan coba lagi atau hubungi dukungan pelanggan.",
+          },
+        });
+      }
+
+      await User.findByIdAndUpdate(playerId, {
+        "gameSuspendStatus.joker.lock": status !== true,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: {
+          en: `JOKER: Player status successfully updated to ${jokerStatus}.`,
+          zh: `JOKER: 玩家状态已成功更新为${
+            jokerStatus === "Active" ? "激活" : "暂停"
+          }。`,
+          ms: `JOKER: Status pemain berjaya dikemas kini kepada ${
+            jokerStatus === "Active" ? "Aktif" : "Digantung"
+          }.`,
+          zh_hk: `JOKER: 玩家狀態已成功更新為${
+            jokerStatus === "Active" ? "激活" : "暫停"
+          }。`,
+          id: `JOKER: Status pemain berhasil diperbarui menjadi ${
+            jokerStatus === "Active" ? "Aktif" : "Ditangguhkan"
+          }.`,
+        },
+      });
+    } catch (error) {
+      console.log("JOKER: Failed to update player status:", error.message);
+      return res.status(500).json({
+        success: false,
+        message: {
+          en: "JOKER: Failed to update player status due to a technical issue. Please try again or contact customer support.",
+          zh: "JOKER: 由于技术问题更新玩家状态失败。请重试或联系客服。",
+          ms: "JOKER: Gagal mengemas kini status pemain kerana masalah teknikal. Sila cuba lagi atau hubungi sokongan pelanggan.",
+          zh_hk: "JOKER: 由於技術問題更新玩家狀態失敗。請重試或聯絡客服。",
+          id: "JOKER: Gagal memperbarui status pemain karena masalah teknis. Silakan coba lagi atau hubungi dukungan pelanggan.",
+        },
+      });
+    }
+  }
+);
+
+router.get(
+  "/api/joker/forcelogout/:playerId",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const playerId = req.params.playerId;
+      const currentPlayer = await User.findById(playerId);
+
+      if (!currentPlayer) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User not found. Please try again or contact customer service for assistance.",
+            zh: "用户未找到，请重试或联系客服以获取帮助。",
+            ms: "Pengguna tidak ditemui, sila cuba lagi atau hubungi khidmat pelanggan untuk bantuan.",
+            zh_hk: "搵唔到用戶，麻煩再試多次或者聯絡客服幫手。",
+            id: "Pengguna tidak ditemukan. Silakan coba lagi atau hubungi layanan pelanggan untuk bantuan.",
+          },
+        });
+      }
+
+      const timestamp = moment().unix();
+
+      const fields = {
+        Method: "SO",
+        Username: currentPlayer.gameId,
+        Timestamp: timestamp,
+      };
+
+      const signature = generateSignature(fields, gameKEY);
+
+      const response = await axios.post(
+        `${gameAPIURL}?appid=${gameAPPID}&signature=${encodeURIComponent(
+          signature
+        )}`,
+        fields,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.data.Status !== "OK") {
+        console.log("JOKER: Failed to force logout player:", response.data);
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "JOKER: Failed to force player logout. Please try again or contact customer support.",
+            zh: "JOKER: 强制玩家登出失败。请重试或联系客服。",
+            ms: "JOKER: Gagal memaksa pemain log keluar. Sila cuba lagi atau hubungi sokongan pelanggan.",
+            zh_hk: "JOKER: 強制玩家登出失敗。請重試或聯絡客服。",
+            id: "JOKER: Gagal memaksa pemain logout. Silakan coba lagi atau hubungi dukungan pelanggan.",
+          },
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: {
+          en: "JOKER: Player successfully logged out.",
+          zh: "JOKER: 玩家已成功登出。",
+          ms: "JOKER: Pemain berjaya dilog keluar.",
+          zh_hk: "JOKER: 玩家已成功登出。",
+          id: "JOKER: Pemain berhasil logout.",
+        },
+      });
+    } catch (error) {
+      console.log("JOKER: Failed to update player status:", error.message);
+      return res.status(500).json({
+        success: false,
+        message: {
+          en: "JOKER: Failed to force player logout due to a technical issue. Please try again or contact customer support.",
+          zh: "JOKER: 由于技术问题强制玩家登出失败。请重试或联系客服。",
+          ms: "JOKER: Gagal memaksa pemain log keluar kerana masalah teknikal. Sila cuba lagi atau hubungi sokongan pelanggan.",
+          zh_hk: "JOKER: 由於技術問題強制玩家登出失敗。請重試或聯絡客服。",
+          id: "JOKER: Gagal memaksa pemain logout karena masalah teknis. Silakan coba lagi atau hubungi dukungan pelanggan.",
         },
       });
     }
