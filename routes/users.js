@@ -1,5 +1,6 @@
 const express = require("express");
 const bcrypt = require("bcrypt");
+const { Kiosk } = require("../models/kiosk.model");
 const {
   User,
   userLog,
@@ -3008,13 +3009,11 @@ router.post(
           },
         });
       }
-
       const generalSettings = await general.findOneAndUpdate(
         {},
         { $inc: { userIdCounter: 1 } },
         { sort: { createdAt: -1 }, new: true }
       );
-
       if (!generalSettings) {
         return res.status(200).json({
           success: false,
@@ -3024,9 +3023,7 @@ router.post(
           },
         });
       }
-
       const newUserId = generalSettings.userIdCounter;
-
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
       const newReferralCode = await generateUniqueReferralCode();
@@ -3042,8 +3039,9 @@ router.post(
           };
         }
       }
+
       const newUser = await User.create({
-        userid: newUserId, // 加这个
+        userid: newUserId,
         username: normalizedUsername,
         fullname: normalizedFullname,
         email,
@@ -3057,8 +3055,9 @@ router.post(
         referralQrCode,
         viplevel: "Bronze",
         gameId: await generateUniqueGameId(),
-        referralBy, // 也加上这个，之前漏了
+        referralBy,
       });
+
       if (referralBy) {
         await User.findByIdAndUpdate(referralBy.user_id, {
           $push: {
@@ -3069,6 +3068,27 @@ router.post(
           },
         });
       }
+
+      const kiosks = await Kiosk.find({
+        isActive: true,
+        registerGameAPI: { $exists: true, $ne: "" },
+      });
+
+      const BASE_URL = process.env.BASE_URL || "http://localhost:3001/";
+
+      for (const kiosk of kiosks) {
+        try {
+          await fetch(`${BASE_URL}${kiosk.registerGameAPI}/${User._id}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          });
+        } catch (error) {
+          console.error(`[Register] ${kiosk.name} error:`, error.message);
+        }
+      }
+
       res.status(200).json({
         success: true,
         message: {
@@ -4903,6 +4923,107 @@ router.get("/api/verify-magic-link/:token", async (req, res) => {
     });
   }
 });
+
+// Admin Direct Deposit (Submit + Auto Approve)
+router.post(
+  "/admin/api/admin-direct-deposit",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const adminId = req.user.userId;
+      const adminuser = await adminUser.findById(adminId);
+      if (!adminuser) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Admin User not found",
+            zh: "未找到管理员用户",
+          },
+        });
+      }
+      const { userId, username, amount, kioskId, kioskName, remark } = req.body;
+      if (!userId || !username || !amount || amount <= 0) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Invalid request data",
+            zh: "请求数据无效",
+          },
+        });
+      }
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User not found",
+            zh: "找不到用户",
+          },
+        });
+      }
+      const transactionId = uuidv4();
+      const newDeposit = new Deposit({
+        transactionId,
+        userId: user._id,
+        username: user.username,
+        fullname: user.fullname,
+        walletType: "Main",
+        transactionType: "deposit",
+        processBy: adminuser.username,
+        amount: Number(amount),
+        walletamount: user.wallet,
+        method: "admin",
+        status: "approved",
+        remark: remark || `Admin Direct Deposit - ${kioskName}`,
+        processtime: "0s",
+        duplicateIP: user.duplicateIP || false,
+        duplicateBank: user.duplicateBank || false,
+      });
+      await newDeposit.save();
+      const isFirstDeposit = user.firstDepositDate === null;
+      const updateFields = {
+        $inc: {
+          totaldeposit: Number(amount),
+        },
+        $set: {
+          lastdepositdate: new Date(),
+          ...(isFirstDeposit && { firstDepositDate: new Date() }),
+        },
+      };
+      await User.findByIdAndUpdate(user._id, updateFields);
+      const walletLog = new UserWalletLog({
+        userId: user._id,
+        transactionid: transactionId,
+        transactiontime: new Date(),
+        transactiontype: "deposit",
+        amount: Number(amount),
+        status: "approved",
+        remark: `Admin Direct Deposit - ${kioskName}`,
+      });
+      await walletLog.save();
+      res.status(200).json({
+        success: true,
+        message: {
+          en: `Deposit of ${amount} approved for ${username}`,
+          zh: `已为 ${username} 批准 ${amount} 存款`,
+        },
+        data: {
+          depositId: newDeposit._id,
+          transactionId,
+        },
+      });
+    } catch (error) {
+      console.error("Error in admin direct deposit:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
 
 module.exports = router;
 module.exports.checkAndUpdateVIPLevel = checkAndUpdateVIPLevel;
