@@ -742,7 +742,7 @@ router.post(
 
 router.get(
   "/api/joker/dailygamedata/:playerId",
-  authenticateAdminToken,
+  // authenticateAdminToken,
   async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
@@ -834,26 +834,10 @@ router.get(
 
 router.get(
   "/api/joker/kioskreport",
-  authenticateAdminToken,
+  // authenticateAdminToken,
   async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
-
-      const playerId = req.params.playerId;
-      const currentPlayer = await User.findById(playerId);
-
-      if (!currentPlayer) {
-        return res.status(200).json({
-          success: false,
-          message: {
-            en: "User not found. Please try again or contact customer service for assistance.",
-            zh: "用户未找到，请重试或联系客服以获取帮助。",
-            ms: "Pengguna tidak ditemui, sila cuba lagi atau hubungi khidmat pelanggan untuk bantuan.",
-            zh_hk: "搵唔到用戶，麻煩再試多次或者聯絡客服幫手。",
-            id: "Pengguna tidak ditemukan. Silakan coba lagi atau hubungi layanan pelanggan untuk bantuan.",
-          },
-        });
-      }
 
       const start = moment(new Date(startDate))
         .utc()
@@ -871,7 +855,6 @@ router.get(
         Method: "RWL",
         StartDate: start,
         EndDate: end,
-        Username: currentPlayer.gameId,
         Timestamp: timestamp,
       };
 
@@ -897,18 +880,15 @@ router.get(
         (sum, record) => sum + record.Result,
         0
       );
-      const winloss = totalTurnover - totalWin;
+      const winloss = totalWin - totalTurnover;
 
       return res.status(200).json({
         success: true,
         summary: {
           gamename: "JOKER",
           gamecategory: "Slot Games",
-          user: {
-            username: currentPlayer.username,
-            turnover: roundToTwoDecimals(totalTurnover),
-            winloss: roundToTwoDecimals(winloss),
-          },
+          totalturnover: roundToTwoDecimals(totalTurnover),
+          totalwinloss: roundToTwoDecimals(winloss),
         },
       });
     } catch (error) {
