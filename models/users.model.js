@@ -3,6 +3,7 @@ const moment = require("moment");
 
 const bankAccountSchema = new mongoose.Schema({
   name: String,
+  bankcode: String,
   bankname: String, // 银行名称
   banknumber: String, // 银行账号
 });
@@ -104,6 +105,11 @@ const dailyGameAmountsSchema = new mongoose.Schema(
 
 const userSchema = new mongoose.Schema(
   {
+    userid: {
+      type: Number,
+      unique: true,
+      sparse: true,
+    },
     gameId: String,
     evolutionUserId: Number,
     email: String,

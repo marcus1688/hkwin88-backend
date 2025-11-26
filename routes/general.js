@@ -575,6 +575,41 @@ router.put(
   }
 );
 
+// Admin Get Next User Id
+router.get(
+  "/admin/api/preview-next-userid",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const settings = await general.findOne().sort({ createdAt: -1 });
+
+      if (!settings) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "General settings not found",
+            zh: "未找到通用设置",
+          },
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        nextUserId: (settings.userIdCounter || 10000) + 1,
+      });
+    } catch (error) {
+      console.error("Error getting next user ID:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Error fetching user ID",
+          zh: "获取用户ID时出错",
+        },
+      });
+    }
+  }
+);
+
 // Compare APK Version
 router.post("/api/check-apk-update", async (req, res) => {
   try {

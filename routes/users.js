@@ -18,6 +18,7 @@ const UserWalletCashOut = require("../models/userwalletcashout.model");
 const Lock = require("../models/lock.model");
 const jwt = require("jsonwebtoken");
 const { checkForSimilarNames } = require("../utils/nameValidator");
+const { general } = require("../models/general.model");
 const {
   generateToken,
   generateGameToken,
@@ -2840,12 +2841,18 @@ router.get("/admin/api/allusers", authenticateAdminToken, async (req, res) => {
           $or: [
             { username: new RegExp(search, "i") },
             { fullname: new RegExp(search, "i") },
-            ...(isNaN(search) ? [] : [{ phonenumber: parseInt(search) }]),
+            ...(isNaN(search)
+              ? []
+              : [
+                  { phonenumber: parseInt(search) },
+                  { userid: parseInt(search) },
+                ]),
           ],
         }
       : {};
 
     const sortKeyMap = {
+      userid: "userid",
       vipLevel: "viplevel",
       username: "username",
       fullname: "fullname",
@@ -2932,6 +2939,7 @@ router.get("/admin/api/allusers", authenticateAdminToken, async (req, res) => {
       {
         $project: {
           _id: 1,
+          userid: 1,
           username: 1,
           fullname: 1,
           viplevel: 1,
@@ -2999,8 +3007,7 @@ router.post(
       bankAccounts = [],
       referralCode,
     } = req.body;
-
-    if (!username || !fullname || !password || !phonenumber) {
+    if (!fullname || !phonenumber) {
       return res.status(200).json({
         success: false,
         message: {
@@ -3009,19 +3016,14 @@ router.post(
         },
       });
     }
-
     const normalizedUsername = username.toLowerCase();
     const normalizedFullname = fullname.toLowerCase().replace(/\s+/g, "");
     const formattedNumber = String(phonenumber).startsWith("852")
       ? String(phonenumber)
       : `852${phonenumber}`;
-
     try {
       const existingUser = await User.findOne({
-        $or: [
-          { username: normalizedUsername },
-          { fullname: new RegExp(`^${normalizedFullname}$`, "i") },
-        ],
+        $or: [{ fullname: new RegExp(`^${normalizedFullname}$`, "i") }],
       });
       if (existingUser) {
         return res.status(200).json({
@@ -3035,7 +3037,6 @@ router.post(
       const existingPhoneNumber = await User.findOne({
         phonenumber: formattedNumber,
       });
-
       if (existingPhoneNumber) {
         return res.status(200).json({
           success: false,
@@ -3045,12 +3046,30 @@ router.post(
           },
         });
       }
+
+      const generalSettings = await general.findOneAndUpdate(
+        {},
+        { $inc: { userIdCounter: 1 } },
+        { sort: { createdAt: -1 }, new: true }
+      );
+
+      if (!generalSettings) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "System not configured. Please set up general settings first.",
+            zh: "系统未配置，请先设置通用设置。",
+          },
+        });
+      }
+
+      const newUserId = generalSettings.userIdCounter;
+
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
       const newReferralCode = await generateUniqueReferralCode();
       const referralLink = generateReferralLink(newReferralCode);
       const referralQrCode = await generateQRWithLogo(referralLink);
-
       let referralBy = null;
       if (referralCode) {
         const referrer = await User.findOne({ referralCode: referralCode });
@@ -3061,8 +3080,8 @@ router.post(
           };
         }
       }
-
       const newUser = await User.create({
+        userid: newUserId, // 加这个
         username: normalizedUsername,
         fullname: normalizedFullname,
         email,
@@ -3076,8 +3095,8 @@ router.post(
         referralQrCode,
         viplevel: "Bronze",
         gameId: await generateUniqueGameId(),
+        referralBy, // 也加上这个，之前漏了
       });
-
       if (referralBy) {
         await User.findByIdAndUpdate(referralBy.user_id, {
           $push: {
@@ -3088,12 +3107,15 @@ router.post(
           },
         });
       }
-
       res.status(200).json({
         success: true,
         message: {
           en: "User created successfully",
           zh: "用户创建成功",
+        },
+        data: {
+          userid: newUserId,
+          username: newUser.username,
         },
       });
     } catch (error) {
@@ -3117,7 +3139,7 @@ router.get(
     try {
       const userId = req.params.userId;
       const user = await User.findById(userId).select(
-        " username totalturnover  fullname email phonenumber positionTaking status viplevel bankAccounts wallet createdAt lastLogin lastLoginIp registerIp dob wallet withdrawlock rebate turnover winloss gamewallet rebate totaldeposit totalwithdraw lastdepositdate totalbonus gameStatus luckySpinCount remark referralCode referralBy duplicateIP gameStatus gameLock registerVisitorId gameId wallettwo"
+        " username totalturnover  fullname email phonenumber positionTaking status viplevel bankAccounts wallet createdAt lastLogin lastLoginIp registerIp dob wallet withdrawlock rebate turnover winloss gamewallet rebate totaldeposit totalwithdraw lastdepositdate totalbonus gameStatus luckySpinCount remark referralCode referralBy duplicateIP gameStatus gameLock registerVisitorId gameId wallettwo userid"
       );
       if (!user) {
         return res.status(200).json({
@@ -5116,7 +5138,5 @@ router.get("/api/verify-magic-link/:token", async (req, res) => {
   }
 });
 
-
 module.exports = router;
 module.exports.checkAndUpdateVIPLevel = checkAndUpdateVIPLevel;
-
