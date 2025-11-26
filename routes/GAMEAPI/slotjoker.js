@@ -668,3 +668,4 @@ router.post(
 
 module.exports = router;
 module.exports.registerJokerUser = registerJokerUser;
+module.exports.JokerCheckBalance = JokerCheckBalance;
