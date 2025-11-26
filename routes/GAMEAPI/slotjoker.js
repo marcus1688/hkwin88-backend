@@ -38,14 +38,13 @@ function generateSignature(fields, secretKey) {
   return hmac.digest("base64");
 }
 
-async function setJokerPassword(username) {
+async function setJokerPassword(user) {
   try {
     const timestamp = moment().unix();
 
     const fields = {
       Method: "SP",
-      //   Username: user.username,
-      Username: "HIHI",
+      Username: user.gameId,
       Password: gamePassword,
       Timestamp: timestamp,
     };
@@ -63,31 +62,39 @@ async function setJokerPassword(username) {
         },
       }
     );
-    console.log(response.data);
-    if (response.data.Code === -98 || response.data.Code === 0) {
-      return { success: true };
+
+    if (response.data.Status !== "OK") {
+      return {
+        success: false,
+        error: response.data,
+      };
     }
 
-    return {
-      success: false,
-      data: response.data,
-    };
+    await User.findOneAndUpdate(
+      { username: user.username },
+      {
+        $set: {
+          jokerGamePW: gamePassword,
+        },
+      }
+    );
+
+    return { success: true, data: response.data, password: gamePassword };
   } catch (error) {
-    console.error("CMD368 error in creating member:", error.message);
+    console.error("JOKER error in setting password:", error.message);
     return {
       success: false,
       error: error.message,
     };
   }
 }
-async function registerJokerUser(username) {
+async function registerJokerUser(user) {
   try {
     const timestamp = moment().unix();
 
     const fields = {
       Method: "CU",
-      //   Username: user.username,
-      Username: username,
+      Username: user.gameId,
       Timestamp: timestamp,
     };
 
@@ -104,15 +111,34 @@ async function registerJokerUser(username) {
         },
       }
     );
-    console.log(response.data);
+
     if (response.data.Status !== "Created" && response.data.Status !== "OK") {
-      return { success: true };
+      return {
+        success: false,
+        error: response.data,
+      };
     }
 
-    return {
-      success: false,
-      error: response.data,
-    };
+    await User.findOneAndUpdate(
+      { username: user.username },
+      {
+        $set: {
+          jokerGameName: `${gameAPPID}.${user.gameId}`,
+        },
+      }
+    );
+
+    const setPasswordResponse = await setJokerPassword(user);
+
+    if (!setPasswordResponse.success) {
+      console.log("failed to set password for user", setPasswordResponse);
+      return {
+        success: false,
+        error: setPasswordResponse.error,
+      };
+    }
+
+    return { success: true, data: response.data };
   } catch (error) {
     console.error("JOKER error in creating member:", error.message);
     return {
@@ -123,3 +149,5 @@ async function registerJokerUser(username) {
 }
 
 module.exports = router;
+module.exports.registerJokerUser = registerJokerUser;
+module.exports.setJokerPassword = setJokerPassword;

@@ -313,8 +313,10 @@ const userSchema = new mongoose.Schema(
       type: userLuckySpinSettingSchema,
       default: () => ({ settings: [], remainingCount: 0 }),
     },
-
-    ppGameToken: {
+    jokerGameName: {
+      type: String,
+    },
+    jokerGamePW: {
       type: String,
     },
   },
