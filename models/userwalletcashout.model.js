@@ -36,6 +36,9 @@ const userwalletcashoutschema = new mongoose.Schema(
     status: {
       type: String,
     },
+    game: {
+      type: String,
+    },
     remark: {
       type: String,
       default: "-",
