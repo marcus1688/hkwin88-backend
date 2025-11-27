@@ -165,7 +165,7 @@ router.post(
   }
 );
 
-// Admin Submit Deposit Bonus
+// Admin Submit Deposit Bonus (Direct Approve)
 router.post(
   "/admin/api/submitdepositbonus",
   authenticateAdminToken,
@@ -241,27 +241,33 @@ router.post(
         username: user.username,
         fullname: user.fullname,
         transactionType: "bonus",
-        processBy: "admin",
+        processBy: adminuser.username,
         amount: bonusAmount,
         walletamount: user.wallet,
-        status: "pending",
+        status: "approved",
         method: "manual",
-        remark: "CS",
+        remark: "-",
         promotionname: promotion.maintitle,
         promotionnameEN: promotion.maintitleEN,
         promotionId: promotion._id,
         depositId,
         duplicateIP: user.duplicateIP,
         duplicateBank: user.duplicateBank,
+        processtime: "0s",
       });
       await NewBonusTransaction.save();
+      await User.findByIdAndUpdate(userid, {
+        $inc: {
+          totalbonus: bonusAmount,
+        },
+      });
       const walletLog = new UserWalletLog({
         userId: userid,
         transactionid: NewBonusTransaction.transactionId,
         transactiontime: new Date(),
         transactiontype: "bonus",
         amount: bonusAmount,
-        status: "pending",
+        status: "approved",
         promotionnameCN: promotion.maintitle,
         promotionnameEN: promotion.maintitleEN,
       });
@@ -269,8 +275,12 @@ router.post(
       res.status(200).json({
         success: true,
         message: {
-          en: "Bonus submitted successfully",
-          zh: "奖金提交成功",
+          en: `Bonus of ${bonusAmount} approved successfully`,
+          zh: `奖金 ${bonusAmount} 已成功批准`,
+        },
+        data: {
+          bonusAmount,
+          transactionId,
         },
       });
     } catch (error) {

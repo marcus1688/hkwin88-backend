@@ -86,6 +86,9 @@ const depositschema = new mongoose.Schema(
       type: String,
       default: "PENDING",
     },
+    game: {
+      type: String,
+    },
   },
   {
     timestamps: {

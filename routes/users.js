@@ -4933,7 +4933,6 @@ router.get("/api/verify-magic-link/:token", async (req, res) => {
   }
 });
 
-// Admin Direct Deposit (Submit + Auto Approve)
 router.post(
   "/admin/api/admin-direct-deposit",
   authenticateAdminToken,
@@ -4950,13 +4949,23 @@ router.post(
           },
         });
       }
-      const { userId, username, amount, kioskId, kioskName, remark } = req.body;
+      const { userId, username, amount, kioskId, kioskName, bankId, remark } =
+        req.body;
       if (!userId || !username || !amount || amount <= 0) {
         return res.status(200).json({
           success: false,
           message: {
             en: "Invalid request data",
             zh: "请求数据无效",
+          },
+        });
+      }
+      if (!bankId) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Bank is required",
+            zh: "请选择银行",
           },
         });
       }
@@ -4970,12 +4979,26 @@ router.post(
           },
         });
       }
+      const bank = await BankList.findById(bankId);
+      if (!bank) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Bank not found",
+            zh: "找不到银行",
+          },
+        });
+      }
       const transactionId = uuidv4();
       const newDeposit = new Deposit({
         transactionId,
         userId: user._id,
         username: user.username,
         fullname: user.fullname,
+        bankid: bank._id,
+        bankname: bank.bankname,
+        ownername: bank.ownername,
+        transfernumber: bank.bankaccount,
         walletType: "Main",
         transactionType: "deposit",
         processBy: adminuser.username,
@@ -4983,7 +5006,8 @@ router.post(
         walletamount: user.wallet,
         method: "admin",
         status: "approved",
-        remark: remark || `Admin Direct Deposit - ${kioskName}`,
+        remark: remark,
+        game: kioskName,
         processtime: "0s",
         duplicateIP: user.duplicateIP || false,
         duplicateBank: user.duplicateBank || false,
@@ -5000,6 +5024,47 @@ router.post(
         },
       };
       await User.findByIdAndUpdate(user._id, updateFields);
+      await BankList.findByIdAndUpdate(
+        bankId,
+        [
+          {
+            $set: {
+              totalDeposits: { $add: ["$totalDeposits", Number(amount)] },
+              currentbalance: {
+                $subtract: [
+                  {
+                    $add: [
+                      "$startingbalance",
+                      { $add: ["$totalDeposits", Number(amount)] },
+                      "$totalCashIn",
+                    ],
+                  },
+                  {
+                    $add: ["$totalWithdrawals", "$totalCashOut"],
+                  },
+                ],
+              },
+            },
+          },
+        ],
+        { new: true }
+      );
+      const updatedBank = await BankList.findById(bankId);
+      const bankLog = new BankTransactionLog({
+        bankName: bank.bankname,
+        ownername: bank.ownername,
+        bankAccount: bank.bankaccount,
+        remark: remark,
+        lastBalance: updatedBank.currentbalance - Number(amount),
+        currentBalance: updatedBank.currentbalance,
+        processby: adminuser.username,
+        qrimage: bank.qrimage,
+        playerusername: user.username,
+        playerfullname: user.fullname,
+        transactiontype: "deposit",
+        amount: Number(amount),
+      });
+      await bankLog.save();
       const walletLog = new UserWalletLog({
         userId: user._id,
         transactionid: transactionId,
@@ -5007,7 +5072,8 @@ router.post(
         transactiontype: "deposit",
         amount: Number(amount),
         status: "approved",
-        remark: `Admin Direct Deposit - ${kioskName}`,
+        remark: remark,
+        game: kioskName,
       });
       await walletLog.save();
       res.status(200).json({

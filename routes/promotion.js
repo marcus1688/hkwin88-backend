@@ -406,7 +406,7 @@ router.get(
   async (req, res) => {
     try {
       const promotions = await promotion
-        .find({ isDeposit: true }, "_id maintitle maintitleEN bonuspercentage")
+        .find({ isDeposit: true })
         .sort({ createdAt: 1 });
       res.status(200).json({ success: true, data: promotions });
     } catch (error) {

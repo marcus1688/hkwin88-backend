@@ -9,6 +9,7 @@ const UserWalletLogSchema = new mongoose.Schema(
     transactiontype: String,
     amount: String,
     status: String,
+    game: String,
     promotionnameCN: String,
     promotionnameEN: String,
   },

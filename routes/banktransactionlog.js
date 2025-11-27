@@ -66,22 +66,22 @@ router.get(
       const [deposits, withdraws, bonuses, usercashout] = await Promise.all([
         Deposit.find(queryCondition)
           .select(
-            "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname"
+            "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname game"
           )
           .lean(),
         Withdraw.find(queryCondition)
           .select(
-            "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname"
+            "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname game"
           )
           .lean(),
         Bonus.find(queryCondition)
           .select(
-            "username fullname promotionnameEN method transactionType amount status remark createdAt processBy processtime _id reverted imageUrl imageUrls duplicateIP duplicateBank"
+            "username fullname promotionnameEN method transactionType amount status remark createdAt processBy processtime _id reverted imageUrl imageUrls duplicateIP duplicateBank game"
           )
           .lean(),
         UserWalletCashOut.find(queryCondition)
           .select(
-            "username fullname transactionId walletType transactionType amount status remark method processBy reverted revertedProcessBy createdAt _id duplicateIP duplicateBank"
+            "username fullname transactionId walletType transactionType amount status remark method processBy reverted revertedProcessBy createdAt _id duplicateIP duplicateBank game"
           )
           .lean(),
       ]);
@@ -94,6 +94,7 @@ router.get(
           transactionType: transaction.transactionType,
           amount: transaction.amount,
           status: transaction.status,
+          game: transaction.game,
           remark: transaction.remark,
           createdAt: transaction.createdAt,
           processBy: transaction.processBy,
