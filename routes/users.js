@@ -4933,6 +4933,7 @@ router.get("/api/verify-magic-link/:token", async (req, res) => {
   }
 });
 
+// Admin Direct Deposit
 router.post(
   "/admin/api/admin-direct-deposit",
   authenticateAdminToken,
@@ -5089,6 +5090,301 @@ router.post(
       });
     } catch (error) {
       console.error("Error in admin direct deposit:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
+
+// Admin Direct Withdraw
+router.post(
+  "/admin/api/admin-direct-withdraw",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const adminId = req.user.userId;
+      const adminuser = await adminUser.findById(adminId);
+      if (!adminuser) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Admin User not found",
+            zh: "未找到管理员用户",
+          },
+        });
+      }
+      const { userId, username, amount, kioskId, kioskName, bankId, remark } =
+        req.body;
+      if (!userId || !username || !amount || amount <= 0) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Invalid request data",
+            zh: "请求数据无效",
+          },
+        });
+      }
+      if (!bankId) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Bank is required",
+            zh: "请选择银行",
+          },
+        });
+      }
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User not found",
+            zh: "找不到用户",
+          },
+        });
+      }
+      const bank = await BankList.findById(bankId);
+      if (!bank) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Bank not found",
+            zh: "找不到银行",
+          },
+        });
+      }
+
+      const transactionId = uuidv4();
+      const newWithdraw = new Withdraw({
+        transactionId,
+        userId: user._id,
+        username: user.username,
+        fullname: user.fullname,
+        bankid: bank._id,
+        bankname: bank.bankname,
+        ownername: bank.ownername,
+        transfernumber: bank.bankaccount,
+        walletType: "Main",
+        transactionType: "withdraw",
+        processBy: adminuser.username,
+        amount: Number(amount),
+        walletamount: user.wallet,
+        method: "admin",
+        status: "approved",
+        remark: remark,
+        game: kioskName,
+        processtime: "0s",
+        duplicateIP: user.duplicateIP || false,
+        duplicateBank: user.duplicateBank || false,
+      });
+      await newWithdraw.save();
+
+      await User.findByIdAndUpdate(user._id, {
+        $inc: {
+          totalwithdraw: Number(amount),
+        },
+        $set: {
+          lastwithdrawdate: new Date(),
+        },
+      });
+
+      await BankList.findByIdAndUpdate(
+        bankId,
+        [
+          {
+            $set: {
+              totalWithdrawals: { $add: ["$totalWithdrawals", Number(amount)] },
+              currentbalance: {
+                $subtract: [
+                  {
+                    $add: [
+                      "$startingbalance",
+                      "$totalDeposits",
+                      "$totalCashIn",
+                    ],
+                  },
+                  {
+                    $add: [
+                      { $add: ["$totalWithdrawals", Number(amount)] },
+                      "$totalCashOut",
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        ],
+        { new: true }
+      );
+
+      const updatedBank = await BankList.findById(bankId);
+      const bankLog = new BankTransactionLog({
+        bankName: bank.bankname,
+        ownername: bank.ownername,
+        bankAccount: bank.bankaccount,
+        remark: remark,
+        lastBalance: updatedBank.currentbalance + Number(amount),
+        currentBalance: updatedBank.currentbalance,
+        processby: adminuser.username,
+        qrimage: bank.qrimage,
+        playerusername: user.username,
+        playerfullname: user.fullname,
+        transactiontype: "withdraw",
+        amount: Number(amount),
+      });
+      await bankLog.save();
+
+      const walletLog = new UserWalletLog({
+        userId: user._id,
+        transactionid: transactionId,
+        transactiontime: new Date(),
+        transactiontype: "withdraw",
+        amount: Number(amount),
+        status: "approved",
+        remark: remark,
+        game: kioskName,
+      });
+      await walletLog.save();
+
+      res.status(200).json({
+        success: true,
+        message: {
+          en: `Withdraw of ${amount} approved for ${username}`,
+          zh: `已为 ${username} 批准 ${amount} 提款`,
+        },
+        data: {
+          withdrawId: newWithdraw._id,
+          transactionId,
+        },
+      });
+    } catch (error) {
+      console.error("Error in admin direct withdraw:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
+
+// Admin Direct Bonus
+router.post(
+  "/admin/api/admin-direct-bonus",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const adminId = req.user.userId;
+      const adminuser = await adminUser.findById(adminId);
+      if (!adminuser) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Admin User not found",
+            zh: "未找到管理员用户",
+          },
+        });
+      }
+      const {
+        userId,
+        username,
+        kioskId,
+        kioskName,
+        promotionId,
+        amount,
+        remark,
+      } = req.body;
+      if (!userId || !username || !promotionId || !amount || amount <= 0) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Invalid request data",
+            zh: "请求数据无效",
+          },
+        });
+      }
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User not found",
+            zh: "找不到用户",
+          },
+        });
+      }
+      const promotion = await Promotion.findById(promotionId);
+      if (!promotion) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Promotion not found",
+            zh: "找不到促销活动",
+          },
+        });
+      }
+
+      const transactionId = uuidv4();
+      const newBonus = new Bonus({
+        transactionId,
+        userId: user._id,
+        username: user.username,
+        fullname: user.fullname,
+        transactionType: "bonus",
+        processBy: adminuser.username,
+        amount: Number(amount),
+        walletamount: user.wallet,
+        status: "approved",
+        method: "admin",
+        remark: remark || "-",
+        game: kioskName,
+        promotionname: promotion.maintitle,
+        promotionnameEN: promotion.maintitleEN,
+        promotionId: promotion._id,
+        duplicateIP: user.duplicateIP || false,
+        duplicateBank: user.duplicateBank || false,
+        processtime: "0s",
+      });
+      await newBonus.save();
+      await User.findByIdAndUpdate(userId, {
+        $inc: {
+          totalbonus: Number(amount),
+        },
+      });
+      const walletLog = new UserWalletLog({
+        userId: user._id,
+        transactionid: transactionId,
+        transactiontime: new Date(),
+        transactiontype: "bonus",
+        amount: Number(amount),
+        status: "approved",
+        remark: remark || "-",
+        game: kioskName,
+        promotionnameCN: promotion.maintitle,
+        promotionnameEN: promotion.maintitleEN,
+      });
+      await walletLog.save();
+
+      res.status(200).json({
+        success: true,
+        message: {
+          en: `Bonus of ${amount} approved for ${username}`,
+          zh: `已为 ${username} 批准 ${amount} 奖金`,
+        },
+        data: {
+          bonusId: newBonus._id,
+          transactionId,
+        },
+      });
+    } catch (error) {
+      console.error("Error in admin direct bonus:", error);
       res.status(500).json({
         success: false,
         message: {

@@ -56,6 +56,9 @@ const bonusschema = new mongoose.Schema(
       type: String,
       default: "pending",
     },
+    game: {
+      type: String,
+    },
     remark: {
       type: String,
     },

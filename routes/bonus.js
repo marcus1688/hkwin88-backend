@@ -182,8 +182,14 @@ router.post(
           },
         });
       }
-      const { userid, username, promotionId, depositId, depositAmount } =
-        req.body;
+      const {
+        userid,
+        username,
+        promotionId,
+        depositId,
+        depositAmount,
+        kioskName,
+      } = req.body;
       if (!userid || !username || !promotionId) {
         return res.status(200).json({
           success: false,
@@ -247,6 +253,7 @@ router.post(
         status: "approved",
         method: "manual",
         remark: "-",
+        game: kioskName,
         promotionname: promotion.maintitle,
         promotionnameEN: promotion.maintitleEN,
         promotionId: promotion._id,
@@ -268,6 +275,7 @@ router.post(
         transactiontype: "bonus",
         amount: bonusAmount,
         status: "approved",
+        game: kioskName,
         promotionnameCN: promotion.maintitle,
         promotionnameEN: promotion.maintitleEN,
       });
