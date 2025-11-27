@@ -3130,9 +3130,7 @@ router.get(
   async (req, res) => {
     try {
       const userId = req.params.userId;
-      const user = await User.findById(userId).select(
-        " username totalturnover  fullname email phonenumber positionTaking status viplevel bankAccounts wallet createdAt lastLogin lastLoginIp registerIp dob wallet withdrawlock rebate turnover winloss gamewallet rebate totaldeposit totalwithdraw lastdepositdate totalbonus gameStatus luckySpinCount remark referralCode referralBy duplicateIP gameStatus gameLock registerVisitorId gameId wallettwo userid"
-      );
+      const user = await User.findById(userId);
       if (!user) {
         return res.status(200).json({
           success: false,
