@@ -719,6 +719,7 @@ router.post(
             balance,
             userKioskId,
             transferInAPI: kiosk.transferInAPI,
+            transferOutAPI: kiosk.transferOutAPI,
             balanceAPI: kiosk.balanceAPI,
             databaseGameID: kiosk.databaseGameID,
           };

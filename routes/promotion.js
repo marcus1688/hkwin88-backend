@@ -263,6 +263,42 @@ router.get("/api/getexactpromotion", async (req, res) => {
   }
 });
 
+// Admin Get Exact Promotion
+router.get(
+  "/admin/api/getexactpromotion",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const promotions = await promotion.find({
+        claimtype: "Exact",
+        status: true,
+      });
+
+      const sortedPromotions = promotions.sort((a, b) => {
+        const orderA = a.order || 0;
+        const orderB = b.order || 0;
+        if (orderA === 0 && orderB !== 0) return 1;
+        if (orderA !== 0 && orderB === 0) return -1;
+        return orderA - orderB;
+      });
+
+      res.status(200).json({
+        success: true,
+        data: sortedPromotions,
+      });
+    } catch (error) {
+      console.error("Error fetching exact promotions:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
+
 // Admin Side Check Promotion
 router.post(
   "/admin/api/checkpromotion",
