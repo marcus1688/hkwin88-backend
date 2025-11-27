@@ -309,7 +309,7 @@ async function registerJokerUser(user) {
 }
 
 router.post(
-  "/api/joker/register/:userId",
+  "/admin/api/joker/register/:userId",
   authenticateAdminToken,
   async (req, res) => {
     try {
@@ -373,7 +373,7 @@ router.post(
 );
 
 router.post(
-  "/api/joker/getbalance/:userId",
+  "/admin/api/joker/getbalance/:userId",
   authenticateAdminToken,
   async (req, res) => {
     try {
@@ -430,7 +430,7 @@ router.post(
 );
 
 router.post(
-  "/api/joker/deposit/:userId",
+  "/admin/api/joker/deposit/:userId",
   authenticateAdminToken,
   async (req, res) => {
     let formattedDepositAmount = 0;
@@ -546,7 +546,7 @@ router.post(
 );
 
 router.post(
-  "/api/joker/withdraw/:userId",
+  "/admin/api/joker/withdraw/:userId",
   authenticateAdminToken,
   async (req, res) => {
     let formattedWithdrawAmount = 0;
@@ -665,7 +665,7 @@ router.post(
 );
 
 router.post(
-  "/api/joker/updatepassword/:userId",
+  "/admin/api/joker/updatepassword/:userId",
   authenticateAdminToken,
   async (req, res) => {
     try {
@@ -904,7 +904,7 @@ router.get(
 );
 
 router.get(
-  "/api/joker/setstatus/:playerId",
+  "/admin/api/joker/setstatus/:playerId",
   authenticateAdminToken,
   async (req, res) => {
     try {
@@ -1003,7 +1003,7 @@ router.get(
 );
 
 router.get(
-  "/api/joker/forcelogout/:playerId",
+  "/admin/api/joker/forcelogout/:playerId",
   authenticateAdminToken,
   async (req, res) => {
     try {
