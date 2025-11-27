@@ -45,10 +45,18 @@ function roundToTwoDecimals(num) {
 
 const GAME_BALANCE_CHECKERS = [
   {
-    name: "joker",
+    name: "joker-2x",
     key: "jokerBalance",
-    checker: JokerCheckBalance,
+    checker: (user) => JokerCheckBalance(user, "2x"),
     extractBalance: (result) => Number(result.data.Credit),
+    condition: (user) => !!user.jokerGameName,
+  },
+  {
+    name: "joker-5x",
+    key: "jokerBalanceTwo", // Different key for 5x
+    checker: (user) => JokerCheckBalance(user, "5x"),
+    extractBalance: (result) => Number(result.data.Credit),
+    condition: (user) => !!user.jokerGameTwoName,
   },
   // {
   //   name: "pg",
@@ -85,7 +93,12 @@ router.post(
         });
       }
 
-      const balancePromises = GAME_BALANCE_CHECKERS.map(async (game) => {
+      const availableGames = GAME_BALANCE_CHECKERS.filter((game) => {
+        // If game has a condition, check it; otherwise include it
+        return game.condition ? game.condition(user) : true;
+      });
+
+      const balancePromises = availableGames.map(async (game) => {
         try {
           const result = await game.checker(user);
 
@@ -126,6 +139,7 @@ router.post(
         success: true,
         ...balances,
         totalBalance: roundToTwoDecimals(totalBalance),
+        accountsChecked: availableGames.length,
         message: {
           en: "Balance retrieved successfully.",
           zh: "余额查询成功。",
