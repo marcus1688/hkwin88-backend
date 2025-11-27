@@ -8,6 +8,7 @@ const {
   GameDataLog,
 } = require("../models/users.model");
 const UserBankList = require("../models/userbanklist.model");
+const Promotion = require("../models/promotion.model");
 const { adminUser, adminLog } = require("../models/adminuser.model");
 const router = express.Router();
 const Deposit = require("../models/deposit.model");
@@ -3636,9 +3637,8 @@ router.patch(
           },
         });
       }
-      const { amount, remark } = req.body;
+      const { amount, remark, kioskName } = req.body;
       const user = await User.findById(userId);
-
       if (!user) {
         return res.status(200).json({
           success: false,
@@ -3648,38 +3648,6 @@ router.patch(
           },
         });
       }
-      if (amount !== undefined) {
-        if (amount > user.wallet) {
-          return res.status(200).json({
-            success: false,
-            message: {
-              en: "Withdrawal amount exceeds current wallet balance",
-              zh: "提款金额超过当前钱包余额",
-            },
-          });
-        }
-        const kioskSettings = await kioskbalance.findOne({});
-        if (kioskSettings && kioskSettings.status) {
-          const kioskResult = await updateKioskBalance("add", amount, {
-            username: user.username,
-            transactionType: "user cashout",
-            remark: `Manual cashout`,
-            processBy: adminuser.username,
-          });
-          if (!kioskResult.success) {
-            return res.status(200).json({
-              success: false,
-              message: {
-                en: "Failed to update kiosk balance",
-                zh: "更新网点余额失败",
-              },
-            });
-          }
-        }
-        user.wallet -= amount;
-      }
-      await user.save();
-
       const newCashOut = new UserWalletCashOut({
         transactionId: uuidv4(),
         userId: user._id,
@@ -3691,23 +3659,24 @@ router.patch(
         amount: amount,
         status: "approved",
         remark: remark,
+        game: kioskName,
       });
       await newCashOut.save();
 
       res.status(200).json({
         success: true,
         message: {
-          en: "Wallet has been updated successfully",
-          zh: "钱包已成功更新",
+          en: "CashOut recorded successfully",
+          zh: "扣除记录成功",
         },
       });
     } catch (error) {
-      console.error("Error occurred while updating wallet:", error);
+      console.error("Error occurred while processing cashout:", error);
       res.status(500).json({
         success: false,
         message: {
           en: "Error processing cashout",
-          zh: "处理提现时出错",
+          zh: "处理扣除时出错",
         },
       });
     }
