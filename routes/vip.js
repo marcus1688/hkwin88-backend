@@ -351,22 +351,13 @@ async function getVipBenefitsFromDB() {
 }
 
 async function checkMonthlyVipDemotion() {
-  console.log("=== Monthly VIP Check Started ===");
-  console.log(
-    "Time:",
-    moment().tz("Asia/Kuala_Lumpur").format("YYYY-MM-DD HH:mm:ss")
-  );
-
   try {
     const vipLevels = await getVipLevelsFromDB();
     if (vipLevels.length === 0) {
-      console.log("No VIP levels found in database");
       return { success: false, message: "VIP settings not found" };
     }
-    console.log("VIP Levels:", vipLevels);
 
     const vipBenefits = await getVipBenefitsFromDB();
-    console.log("VIP Benefits (Monthly Bonus):", vipBenefits);
 
     const lastMonthStart = moment()
       .tz("Asia/Kuala_Lumpur")
@@ -396,8 +387,6 @@ async function checkMonthlyVipDemotion() {
 
     const monthLabel = moment().tz("Asia/Kuala_Lumpur").format("MMMM YYYY");
 
-    console.log("Checking deposits from:", lastMonthStart, "to:", lastMonthEnd);
-
     const usersWithDeposits = await Deposit.distinct("userId", {
       status: "approved",
       reverted: false,
@@ -407,13 +396,9 @@ async function checkMonthlyVipDemotion() {
       },
     });
 
-    console.log("Users with deposits last month:", usersWithDeposits.length);
-
     const usersWithVip = await User.find({
       viplevel: { $ne: null },
     });
-
-    console.log("Users with VIP level:", usersWithVip.length);
 
     let demotedCount = 0;
     let restoredCount = 0;
@@ -434,25 +419,17 @@ async function checkMonthlyVipDemotion() {
         finalThisMonthVip = newLevel;
         await user.save();
 
-        console.log(
-          `User ${user.username} thisMonthVip demoted from ${currentThisMonthVip} to ${newLevel}`
-        );
         demotedCount++;
       } else {
         if (user.thisMonthVip !== user.viplevel) {
-          const oldThisMonthVip = user.thisMonthVip;
           user.thisMonthVip = user.viplevel;
           finalThisMonthVip = user.viplevel;
           await user.save();
 
-          console.log(
-            `User ${user.username} thisMonthVip restored from ${oldThisMonthVip} to ${user.viplevel}`
-          );
           restoredCount++;
         }
       }
 
-      // 派发 Monthly Bonus
       const bonusAmount = vipBenefits[finalThisMonthVip] || 0;
 
       if (bonusAmount > 0) {
@@ -474,21 +451,10 @@ async function checkMonthlyVipDemotion() {
             claimed: false,
           });
 
-          console.log(
-            `User ${user.username} Monthly Bonus created: ${bonusAmount} (thisMonthVip: ${finalThisMonthVip})`
-          );
           bonusCreatedCount++;
-        } else {
-          console.log(
-            `User ${user.username} Monthly Bonus already exists for ${monthLabel}`
-          );
         }
       }
     }
-
-    console.log(
-      `=== Monthly VIP Check Completed ===\nDemoted: ${demotedCount}\nRestored: ${restoredCount}\nBonus Created: ${bonusCreatedCount}`
-    );
 
     return {
       success: true,
