@@ -8,6 +8,7 @@ const {
   GameDataLog,
 } = require("../models/users.model");
 const UserBankList = require("../models/userbanklist.model");
+const { addContactToGoogle } = require("../utils/googleContact");
 const Promotion = require("../models/promotion.model");
 const { adminUser, adminLog } = require("../models/adminuser.model");
 const router = express.Router();
@@ -2912,7 +2913,7 @@ router.post(
         gameId: await generateUniqueGameId(),
         referralBy,
       });
-
+      addContactToGoogle(newUserId, fullname, formattedPhoneNumbers, "");
       if (referralBy) {
         await User.findByIdAndUpdate(referralBy.user_id, {
           $push: {
