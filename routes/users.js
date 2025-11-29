@@ -5099,6 +5099,16 @@ router.post(
         });
       }
 
+      if (bank.currentbalance < Number(amount)) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: `Insufficient bank balance. Current balance: ${bank.currentbalance}, Withdraw amount: ${amount}`,
+            zh: `银行余额不足。当前余额: ${bank.currentbalance}，提款金额: ${amount}`,
+          },
+        });
+      }
+
       const transactionId = uuidv4();
       const newWithdraw = new Withdraw({
         transactionId,
