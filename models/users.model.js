@@ -203,7 +203,10 @@ const userSchema = new mongoose.Schema(
     viplevel: {
       type: String,
       default: "member",
-      required: true,
+    },
+    thisMonthVip: {
+      type: String,
+      default: null,
     },
     telegramId: {
       type: String,

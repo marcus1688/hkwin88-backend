@@ -675,7 +675,7 @@ router.post("/api/register", async (req, res) => {
       referralBy,
       duplicateIP: isDuplicateIP,
       isPhoneVerified: isPhoneVerified,
-      viplevel: "Bronze",
+      viplevel: null,
       registerVisitorId: fingerprintData?.visitorId || null,
       gameId: await generateUniqueGameId(),
     });
@@ -1317,7 +1317,6 @@ async function checkAndUpdateVIPLevel(userId) {
   try {
     const user = await User.findById(userId);
     if (!user) {
-      console.error("User not found when checking VIP level");
       return { success: false, message: "User not found" };
     }
     const vipSettings = await vip.findOne({});
@@ -1326,7 +1325,6 @@ async function checkAndUpdateVIPLevel(userId) {
       !vipSettings.vipLevels ||
       vipSettings.vipLevels.length === 0
     ) {
-      console.error("VIP settings not found");
       return { success: false, message: "VIP settings not found" };
     }
     const totalDeposit = user.totaldeposit;
@@ -1338,13 +1336,11 @@ async function checkAndUpdateVIPLevel(userId) {
       } else {
         depositA = parseFloat(a.benefits["Total Deposit"] || 0);
       }
-
       if (b.benefits instanceof Map) {
         depositB = parseFloat(b.benefits.get("Total Deposit") || 0);
       } else {
         depositB = parseFloat(b.benefits["Total Deposit"] || 0);
       }
-
       return depositB - depositA;
     });
     let newLevel = null;
@@ -1360,32 +1356,10 @@ async function checkAndUpdateVIPLevel(userId) {
         break;
       }
     }
-    if (!newLevel && sortedVipLevels.length > 0) {
-      const lowestLevelIndex = sortedVipLevels.length - 1;
-      newLevel = sortedVipLevels[lowestLevelIndex].name;
-    }
     if (newLevel && newLevel !== user.viplevel) {
       const oldLevel = user.viplevel;
       user.viplevel = newLevel;
       await user.save();
-      console.log(
-        `User ${user.username} VIP level updated from ${oldLevel} to ${newLevel}`
-      );
-      try {
-        // 假设您有一个VIPChangeLog模型来记录VIP变更
-        /*
-        await new VIPChangeLog({
-          userId: user._id,
-          username: user.username,
-          oldLevel,
-          newLevel,
-          reason: "Total deposit threshold reached",
-          totalDeposit: user.totaldeposit
-        }).save();
-        */
-      } catch (logError) {
-        console.error("Error logging VIP change:", logError);
-      }
       return {
         success: true,
         message: "VIP level updated",
@@ -1393,14 +1367,12 @@ async function checkAndUpdateVIPLevel(userId) {
         newLevel,
       };
     }
-
     return {
       success: true,
       message: "VIP level checked, no update needed",
       currentLevel: user.viplevel,
     };
   } catch (error) {
-    console.error("Error in checkAndUpdateVIPLevel:", error);
     return {
       success: false,
       message: "Internal server error",
@@ -3054,7 +3026,7 @@ router.post(
         referralLink,
         referralCode: newReferralCode,
         referralQrCode,
-        viplevel: "Bronze",
+        viplevel: null,
         gameId: await generateUniqueGameId(),
         referralBy,
       });
@@ -4992,6 +4964,7 @@ router.post(
         },
       };
       await User.findByIdAndUpdate(user._id, updateFields);
+      await checkAndUpdateVIPLevel(user._id);
       await BankList.findByIdAndUpdate(
         bankId,
         [
@@ -5357,6 +5330,93 @@ router.post(
         message: {
           en: "Internal server error",
           zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
+
+// Admin Transfer Game to Game
+router.post(
+  "/admin/api/admin-kiosk-transfer",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const adminId = req.user.userId;
+      const adminuser = await adminUser.findById(adminId);
+      if (!adminuser) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Admin User not found, please contact customer service",
+            zh: "找不到管理员用户，请联系客服",
+          },
+        });
+      }
+
+      const {
+        userId,
+        username,
+        amount,
+        fromKioskId,
+        fromKioskName,
+        fromUserKioskId,
+        toKioskId,
+        toKioskName,
+        toUserKioskId,
+        remark,
+      } = req.body;
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User not found",
+            zh: "找不到用户",
+          },
+        });
+      }
+      const transactionId = uuidv4();
+      const transferOutLog = new UserWalletLog({
+        userId: user._id,
+        transactionid: transactionId,
+        transactiontime: new Date(),
+        transactiontype: "kiosk transfer out",
+        amount: Number(amount),
+        status: "approved",
+        remark: remark || `Transfer to ${toKioskName}`,
+        game: fromKioskName,
+      });
+      await transferOutLog.save();
+      await transferOutLog.save();
+
+      const transferInLog = new UserWalletLog({
+        userId: user._id,
+        transactionid: transactionId,
+        transactiontime: new Date(),
+        transactiontype: "kiosk transfer in",
+        amount: Number(amount),
+        status: "approved",
+        remark: remark || `Transfer from ${fromKioskName}`,
+        game: toKioskName,
+      });
+      await transferInLog.save();
+
+      res.status(200).json({
+        success: true,
+        message: {
+          en: "Transfer between kiosks successful",
+          zh: "平台间转账成功",
+        },
+      });
+    } catch (error) {
+      console.error("Error processing kiosk transfer:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Error processing transfer",
+          zh: "处理转账时出错",
         },
       });
     }

@@ -13,8 +13,9 @@ const {
   DeleteObjectCommand,
 } = require("@aws-sdk/client-s3");
 const multer = require("multer");
-const moment = require("moment");
+const moment = require("moment-timezone");
 const { parse } = require("dotenv");
+const cron = require("node-cron");
 require("dotenv").config();
 const s3Client = new S3Client({
   region: process.env.AWS_REGION,
@@ -285,6 +286,173 @@ router.delete(
       res.status(500).json({
         success: false,
         message: error.message,
+      });
+    }
+  }
+);
+
+async function getVipLevelsFromDB() {
+  const vipSettings = await vip.findOne({});
+  if (
+    !vipSettings ||
+    !vipSettings.vipLevels ||
+    vipSettings.vipLevels.length === 0
+  ) {
+    return [];
+  }
+  const sortedVipLevels = [...vipSettings.vipLevels].sort((a, b) => {
+    let depositA = 0;
+    let depositB = 0;
+    if (a.benefits instanceof Map) {
+      depositA = parseFloat(a.benefits.get("Total Deposit") || 0);
+    } else {
+      depositA = parseFloat(a.benefits["Total Deposit"] || 0);
+    }
+    if (b.benefits instanceof Map) {
+      depositB = parseFloat(b.benefits.get("Total Deposit") || 0);
+    } else {
+      depositB = parseFloat(b.benefits["Total Deposit"] || 0);
+    }
+    return depositA - depositB;
+  });
+
+  return sortedVipLevels.map((l) => l.name);
+}
+
+function demoteVipLevel(currentLevel, vipLevels) {
+  const currentIndex = vipLevels.indexOf(currentLevel);
+  if (currentIndex <= 0) {
+    return null;
+  }
+  return vipLevels[currentIndex - 1];
+}
+
+async function checkMonthlyVipDemotion() {
+  console.log("=== Monthly VIP Check Started ===");
+  console.log(
+    "Time:",
+    moment().tz("Asia/Kuala_Lumpur").format("YYYY-MM-DD HH:mm:ss")
+  );
+  try {
+    const vipLevels = await getVipLevelsFromDB();
+    if (vipLevels.length === 0) {
+      console.log("No VIP levels found in database");
+      return { success: false, message: "VIP settings not found" };
+    }
+    console.log("VIP Levels:", vipLevels);
+    const lastMonthStart = moment()
+      .tz("Asia/Kuala_Lumpur")
+      .subtract(1, "month")
+      .startOf("month")
+      .utc()
+      .toDate();
+
+    const lastMonthEnd = moment()
+      .tz("Asia/Kuala_Lumpur")
+      .subtract(1, "month")
+      .endOf("month")
+      .utc()
+      .toDate();
+
+    console.log("Checking deposits from:", lastMonthStart, "to:", lastMonthEnd);
+
+    const usersWithDeposits = await Deposit.distinct("userId", {
+      status: "approved",
+      reverted: false,
+      createdAt: {
+        $gte: lastMonthStart,
+        $lte: lastMonthEnd,
+      },
+    });
+
+    console.log("Users with deposits last month:", usersWithDeposits.length);
+
+    const usersWithVip = await User.find({
+      viplevel: { $ne: null },
+    });
+
+    console.log("Users with VIP level:", usersWithVip.length);
+
+    let demotedCount = 0;
+
+    for (const user of usersWithVip) {
+      const hasDeposit = usersWithDeposits.some(
+        (depositUserId) => depositUserId.toString() === user._id.toString()
+      );
+
+      if (!hasDeposit) {
+        const currentThisMonthVip = user.thisMonthVip || user.viplevel;
+        const newLevel = demoteVipLevel(currentThisMonthVip, vipLevels);
+
+        user.thisMonthVip = newLevel;
+        await user.save();
+
+        console.log(
+          `User ${user.username} thisMonthVip demoted from ${currentThisMonthVip} to ${newLevel}`
+        );
+        demotedCount++;
+      } else {
+        if (user.thisMonthVip !== user.viplevel) {
+          const oldThisMonthVip = user.thisMonthVip;
+          user.thisMonthVip = user.viplevel;
+          await user.save();
+
+          console.log(
+            `User ${user.username} thisMonthVip restored from ${oldThisMonthVip} to ${user.viplevel}`
+          );
+        }
+      }
+    }
+
+    console.log(
+      `=== Monthly VIP Check Completed. Demoted: ${demotedCount} users ===`
+    );
+
+    return {
+      success: true,
+      demotedCount,
+      checkedUsers: usersWithVip.length,
+    };
+  } catch (error) {
+    console.error("Error in monthly VIP check:", error);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
+
+if (process.env.NODE_ENV !== "development") {
+  cron.schedule(
+    "0 0 1 * *",
+    async () => {
+      await checkMonthlyVipDemotion();
+    },
+    {
+      timezone: "Asia/Kuala_Lumpur",
+    }
+  );
+}
+
+// Admin Manual VIP Demotion Check (测试用)
+router.post(
+  "/admin/api/manual-vip-demotion-check",
+  // authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const result = await checkMonthlyVipDemotion();
+
+      res.status(200).json({
+        success: true,
+        message: "Manual VIP demotion check completed",
+        data: result,
+      });
+    } catch (error) {
+      console.error("Error in manual VIP demotion check:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
       });
     }
   }
