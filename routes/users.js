@@ -2939,11 +2939,11 @@ router.post(
       email,
       dob,
       password,
-      phonenumber,
+      phoneNumbers = [],
       bankAccounts = [],
       referralCode,
     } = req.body;
-    if (!fullname || !phonenumber) {
+    if (!fullname || !phoneNumbers.length) {
       return res.status(200).json({
         success: false,
         message: {
@@ -2954,9 +2954,10 @@ router.post(
     }
     const normalizedUsername = fullname.toLowerCase().replace(/\s+/g, "");
     const normalizedFullname = fullname.toLowerCase().replace(/\s+/g, "");
-    const formattedNumber = String(phonenumber).startsWith("852")
-      ? String(phonenumber)
-      : `852${phonenumber}`;
+    const formattedPhoneNumbers = phoneNumbers.map((phone) =>
+      String(phone).startsWith("852") ? String(phone) : `852${phone}`
+    );
+    const primaryPhone = formattedPhoneNumbers[0];
     try {
       const existingUser = await User.findOne({
         $or: [{ fullname: new RegExp(`^${normalizedFullname}$`, "i") }],
@@ -2971,7 +2972,10 @@ router.post(
         });
       }
       const existingPhoneNumber = await User.findOne({
-        phonenumber: formattedNumber,
+        $or: [
+          { phonenumber: { $in: formattedPhoneNumbers } },
+          { phoneNumbers: { $in: formattedPhoneNumbers } },
+        ],
       });
       if (existingPhoneNumber) {
         return res.status(200).json({
@@ -3020,7 +3024,8 @@ router.post(
         email,
         dob,
         password: hashedPassword,
-        phonenumber: formattedNumber,
+        phonenumber: primaryPhone,
+        phoneNumbers: formattedPhoneNumbers,
         bankAccounts,
         registerIp: "admin register",
         referralLink,
@@ -3145,7 +3150,7 @@ router.put(
       const {
         fullname,
         email,
-        phonenumber,
+        phoneNumbers,
         dob,
         viplevel,
         luckySpinCount,
@@ -3154,20 +3159,49 @@ router.put(
         referralByUsername,
       } = req.body;
 
+      let formattedPhoneNumbers = [];
+      let primaryPhone = null;
+      if (phoneNumbers && phoneNumbers.length) {
+        formattedPhoneNumbers = phoneNumbers
+          .filter((p) => p && p.toString().trim() !== "")
+          .map((phone) =>
+            String(phone).startsWith("852") ? String(phone) : `852${phone}`
+          );
+        primaryPhone = formattedPhoneNumbers[0];
+        const existingPhoneNumber = await User.findOne({
+          _id: { $ne: userId },
+          $or: [
+            { phonenumber: { $in: formattedPhoneNumbers } },
+            { phoneNumbers: { $in: formattedPhoneNumbers } },
+          ],
+        });
+
+        if (existingPhoneNumber) {
+          return res.status(200).json({
+            success: false,
+            message: {
+              en: "Duplicate Phone Number",
+              zh: "电话号码已存在",
+            },
+          });
+        }
+      }
+      const updateData = {
+        fullname,
+        email,
+        dob,
+        viplevel,
+        luckySpinCount,
+        totalturnover,
+        positionTaking,
+      };
+      if (formattedPhoneNumbers.length) {
+        updateData.phonenumber = primaryPhone;
+        updateData.phoneNumbers = formattedPhoneNumbers;
+      }
       const updatedUser = await User.findByIdAndUpdate(
         userId,
-        {
-          $set: {
-            fullname,
-            email,
-            phonenumber: Number(phonenumber),
-            dob,
-            viplevel,
-            luckySpinCount,
-            totalturnover,
-            positionTaking,
-          },
-        },
+        { $set: updateData },
         { new: true }
       );
       if (!updatedUser) {

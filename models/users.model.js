@@ -126,6 +126,11 @@ const userSchema = new mongoose.Schema(
       sparse: true,
     },
     phonenumber: Number,
+    phoneNumbers: [
+      {
+        type: String,
+      },
+    ],
     password: String,
     confirmpassword: String,
     wallet: {
