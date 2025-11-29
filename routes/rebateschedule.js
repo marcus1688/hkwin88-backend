@@ -202,26 +202,26 @@ router.post(
 );
 
 // Admin Manual Action Route (If Needed)
-router.post(
-  "/admin/api/rebate-calculate/manual",
-  // authenticateAdminToken,
-  async (req, res) => {
-    try {
-      await runRebateCalculation();
-      res.json({
-        success: true,
-        message: "Rebate calculation completed",
-      });
-    } catch (error) {
-      console.error("Error running manual rebate calculation:", error);
-      res.status(500).json({
-        success: false,
-        message: "Failed to run rebate calculation",
-        error: error.message,
-      });
-    }
-  }
-);
+// router.post(
+//   "/admin/api/rebate-calculate/manual",
+//   // authenticateAdminToken,
+//   async (req, res) => {
+//     try {
+//       await runRebateCalculation();
+//       res.json({
+//         success: true,
+//         message: "Rebate calculation completed",
+//       });
+//     } catch (error) {
+//       console.error("Error running manual rebate calculation:", error);
+//       res.status(500).json({
+//         success: false,
+//         message: "Failed to run rebate calculation",
+//         error: error.message,
+//       });
+//     }
+//   }
+// );
 
 // Admin Claim Rebate for User
 router.post(
@@ -418,12 +418,9 @@ async function calculateWinLoseRebate(
 
     for (const [username, stats] of Object.entries(userStats)) {
       stats.totalwinlose = stats.totaldeposit - stats.totalwithdraw;
-
       if (stats.totalwinlose > 0) {
         stats.totalRebate = Math.abs(stats.totalwinlose) * (percentage / 100);
-
         if (stats.totalRebate >= 1) {
-          // 检查是否已存在记录
           const existingRecord = await RebateLog.findOne({
             username,
             rebateissuesdate: {
@@ -431,15 +428,12 @@ async function calculateWinLoseRebate(
               $lte: moment(startDate).endOf("day").toDate(),
             },
           });
-
           if (existingRecord) {
             console.log(
               `Record already exists for ${username} - ${dateString}`
             );
             continue;
           }
-
-          // 只创建记录，不自动发放
           await RebateLog.create({
             userId: stats.userId,
             userid: stats.userid,
@@ -466,7 +460,6 @@ async function calculateWinLoseRebate(
         }
       }
     }
-
     console.log(
       `Rebate calculation completed. Created: ${createdCount} records`
     );
