@@ -4509,6 +4509,14 @@ router.get(
         ...Object.keys(userTurnoverMap),
       ]);
 
+      const users = await User.find({
+        username: { $in: Array.from(usernames) },
+      }).select("username userid");
+      const userIdMap = {};
+      users.forEach((u) => {
+        userIdMap[u.username] = u.userid;
+      });
+
       // Create report data
       const reportData = Array.from(usernames).map((username) => {
         const deposit =
@@ -4524,6 +4532,7 @@ router.get(
         const totalTurnover = userTurnoverMap[username] || 0;
 
         return {
+          userid: userIdMap[username] || null,
           username,
           depositQty: deposit.depositQty || 0,
           totalDeposit: deposit.totalDeposit || 0,
