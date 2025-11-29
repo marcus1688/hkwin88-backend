@@ -66,22 +66,22 @@ router.get(
       const [deposits, withdraws, bonuses, usercashout] = await Promise.all([
         Deposit.find(queryCondition)
           .select(
-            "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname game userid"
+            "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname game userid _id userId"
           )
           .lean(),
         Withdraw.find(queryCondition)
           .select(
-            "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname game userid"
+            "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname game userid _id userId"
           )
           .lean(),
         Bonus.find(queryCondition)
           .select(
-            "username fullname promotionnameEN method transactionType amount status remark createdAt processBy processtime _id reverted imageUrl imageUrls duplicateIP duplicateBank game userid"
+            "username fullname promotionnameEN method transactionType amount status remark createdAt processBy processtime _id reverted imageUrl imageUrls duplicateIP duplicateBank game userid _id userId"
           )
           .lean(),
         UserWalletCashOut.find(queryCondition)
           .select(
-            "username fullname transactionId walletType transactionType amount status remark method processBy reverted revertedProcessBy createdAt _id duplicateIP duplicateBank game userid"
+            "username fullname transactionId walletType transactionType amount status remark method processBy reverted revertedProcessBy createdAt _id duplicateIP duplicateBank game userid _id userId"
           )
           .lean(),
       ]);
@@ -89,6 +89,7 @@ router.get(
         const commonFields = {
           _id: transaction._id,
           username: transaction.username,
+          userId: transaction.userId,
           userid: transaction.userid,
           fullname: transaction.fullname,
           method: transaction.method,

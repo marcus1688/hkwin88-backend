@@ -2277,21 +2277,10 @@ router.post(
           },
         });
       }
-      if (user.wallet < deposit.amount) {
-        return res.status(200).json({
-          success: false,
-          message: {
-            en: "Insufficient wallet balance for reversion",
-            zh: "钱包余额不足，无法撤销",
-          },
-        });
-      }
 
       let bank = null;
-
       if (deposit.method !== "auto") {
         bank = await BankList.findById(deposit.bankid);
-
         if (!bank) {
           return res.status(200).json({
             success: false,
@@ -2302,26 +2291,6 @@ router.post(
           });
         }
       }
-
-      const kioskSettings = await kioskbalance.findOne({});
-      if (kioskSettings && kioskSettings.status) {
-        const kioskResult = await updateKioskBalance("add", deposit.amount, {
-          username: user.username,
-          transactionType: "deposit reverted",
-          remark: `Deposit ID: ${deposit._id}`,
-          processBy: adminuser.username,
-        });
-        if (!kioskResult.success) {
-          return res.status(200).json({
-            success: false,
-            message: {
-              en: "Failed to update kiosk balance",
-              zh: "更新Kiosk余额失败",
-            },
-          });
-        }
-      }
-
       if (
         user.firstDepositDate &&
         moment(deposit.createdAt).isSame(moment(user.firstDepositDate))
@@ -2330,27 +2299,8 @@ router.post(
         deposit.newDeposit = false;
       }
 
-      // const spinSetting = await LuckySpinSetting.findOne();
-      // if (spinSetting) {
-      //   const spinCount = Math.floor(
-      //     deposit.amount / spinSetting.depositAmount
-      //   );
-      //   if (user.luckySpinCount < spinCount) {
-      //     return res.status(200).json({
-      //       success: false,
-      //       message: {
-      //         en: "User does not have enough Lucky Spins to revert",
-      //         zh: "用户没有足够的幸运转盘次数可撤销",
-      //       },
-      //     });
-      //   }
-      //   user.luckySpinCount -= spinCount;
-      // }
-
-      user.wallet -= deposit.amount;
       user.totaldeposit -= deposit.amount;
       await user.save();
-
       await checkAndUpdateVIPLevel(user._id);
 
       if (deposit.method !== "auto" && bank) {
@@ -2367,12 +2317,9 @@ router.post(
       const walletLog = await UserWalletLog.findOne({
         transactionid: deposit.transactionId,
       });
-
       if (walletLog) {
         walletLog.status = "cancel";
         await walletLog.save();
-      } else {
-        console.error("UserWalletLog record not found for the deposit.");
       }
 
       adminuser.totalRevertedDeposits += 1;
@@ -2390,6 +2337,7 @@ router.post(
           transactiontype: "reverted deposit",
           amount: deposit.amount,
           qrimage: bank.qrimage,
+          userid: user.userid,
           playerusername: user.username,
           playerfullname: user.fullname,
         });
@@ -2399,8 +2347,8 @@ router.post(
       res.status(200).json({
         success: true,
         message: {
-          en: "Deposit successfully reverted and user wallet updated",
-          zh: "存款已成功撤销并更新用户钱包",
+          en: "Deposit successfully reverted",
+          zh: "存款已成功撤销",
         },
       });
     } catch (error) {
@@ -2464,7 +2412,7 @@ router.post(
           },
         });
       }
-      const bank = await BankList.findById(withdraw.withdrawbankid);
+      const bank = await BankList.findById(withdraw.bankid);
       if (!bank) {
         return res.status(200).json({
           success: false,
@@ -2474,31 +2422,6 @@ router.post(
           },
         });
       }
-
-      const kioskSettings = await kioskbalance.findOne({});
-      if (kioskSettings && kioskSettings.status) {
-        const kioskResult = await updateKioskBalance(
-          "subtract",
-          withdraw.amount,
-          {
-            username: user.username,
-            transactionType: "withdraw reverted",
-            remark: `Withdraw ID: ${withdraw._id}`,
-            processBy: adminuser.username,
-          }
-        );
-        if (!kioskResult.success) {
-          return res.status(200).json({
-            success: false,
-            message: {
-              en: "Failed to update kiosk balance",
-              zh: "更新Kiosk余额失败",
-            },
-          });
-        }
-      }
-
-      user.wallet += withdraw.amount;
       user.totalwithdraw -= withdraw.amount;
       await user.save();
 
@@ -2514,12 +2437,9 @@ router.post(
       const walletLog = await UserWalletLog.findOne({
         transactionid: withdraw.transactionId,
       });
-
       if (walletLog) {
         walletLog.status = "cancel";
         await walletLog.save();
-      } else {
-        console.error("UserWalletLog record not found for the Withdraw.");
       }
 
       adminuser.totalRevertedWithdrawals += 1;
@@ -2536,6 +2456,7 @@ router.post(
         transactiontype: "reverted withdraw",
         amount: withdraw.amount,
         qrimage: bank.qrimage,
+        userid: user.userid,
         playerusername: user.username,
         playerfullname: user.fullname,
       });
@@ -2544,8 +2465,8 @@ router.post(
       res.status(200).json({
         success: true,
         message: {
-          en: "Withdrawal successfully reverted and user wallet updated",
-          zh: "提款已成功撤销并更新用户钱包",
+          en: "Withdrawal successfully reverted",
+          zh: "提款已成功撤销",
         },
       });
     } catch (error) {
@@ -2610,40 +2531,7 @@ router.post(
         });
       }
 
-      if (user.wallet < bonus.amount) {
-        return res.status(200).json({
-          success: false,
-          message: {
-            en: "Insufficient wallet balance for reversion",
-            zh: "钱包余额不足，无法撤销",
-          },
-        });
-      }
-
-      const kioskSettings = await kioskbalance.findOne({});
-      if (kioskSettings && kioskSettings.status) {
-        const kioskResult = await updateKioskBalance("add", bonus.amount, {
-          username: user.username,
-          transactionType: "bonus reverted",
-          remark: `Bonus ID: ${bonus._id}`,
-          processBy: adminuser.username,
-        });
-        if (!kioskResult.success) {
-          return res.status(200).json({
-            success: false,
-            message: {
-              en: "Failed to update kiosk balance",
-              zh: "更新Kiosk余额失败",
-            },
-          });
-        }
-      }
-
-      user.wallet -= bonus.amount;
       user.totalbonus -= bonus.amount;
-      if (bonus.isLuckySpin) {
-        user.luckySpinClaim = false;
-      }
       await user.save();
 
       bonus.reverted = true;
@@ -2657,17 +2545,6 @@ router.post(
       if (walletLog) {
         walletLog.status = "cancel";
         await walletLog.save();
-      } else {
-        console.error("UserWalletLog record not found for the bonus.");
-      }
-      const commissionReport = await AgentCommissionReport.findOne({
-        bonusTransactionId: bonus._id.toString(),
-        status: "approved",
-      });
-
-      if (commissionReport) {
-        commissionReport.status = "cancel";
-        await commissionReport.save();
       }
 
       adminuser.totalRevertedBonuses += 1;
@@ -2676,8 +2553,8 @@ router.post(
       res.status(200).json({
         success: true,
         message: {
-          en: "Bonus successfully reverted and user wallet updated",
-          zh: "奖金已成功撤销并更新用户钱包",
+          en: "Bonus successfully reverted",
+          zh: "奖金已成功撤销",
         },
       });
     } catch (error) {
