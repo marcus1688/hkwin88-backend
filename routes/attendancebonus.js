@@ -9,7 +9,7 @@ const Deposit = require("../models/deposit.model");
 const { adminUser } = require("../models/adminuser.model");
 
 const TIMEZONE = "Asia/Kuala_Lumpur";
-const BONUS_POINTS = 29;
+const BONUS_POINTS = 58;
 
 // 每个拜1 12:10am Attendace Bonus
 if (process.env.NODE_ENV !== "development") {
