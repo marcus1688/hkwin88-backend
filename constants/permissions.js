@@ -57,6 +57,7 @@ const modulePermissions = {
     permissions: [
       { value: "attendance", label: "Attendance" },
       { value: "loyalty", label: "Loyalty" },
+      { value: "vipmonthlybonus", label: "VIP Monthly Bonus" },
     ],
   },
   mail: {

@@ -16,6 +16,7 @@ const multer = require("multer");
 const moment = require("moment-timezone");
 const { parse } = require("dotenv");
 const cron = require("node-cron");
+const VipMonthlyBonus = require("../models/vipmonthlybonus.model");
 require("dotenv").config();
 const s3Client = new S3Client({
   region: process.env.AWS_REGION,
@@ -327,12 +328,35 @@ function demoteVipLevel(currentLevel, vipLevels) {
   return vipLevels[currentIndex - 1];
 }
 
+async function getVipBenefitsFromDB() {
+  const vipSettings = await vip.findOne({});
+  if (
+    !vipSettings ||
+    !vipSettings.vipLevels ||
+    vipSettings.vipLevels.length === 0
+  ) {
+    return {};
+  }
+  const benefitsMap = {};
+  for (const level of vipSettings.vipLevels) {
+    let monthlyBonus = 0;
+    if (level.benefits instanceof Map) {
+      monthlyBonus = parseFloat(level.benefits.get("Monthly Bonus") || 0);
+    } else {
+      monthlyBonus = parseFloat(level.benefits["Monthly Bonus"] || 0);
+    }
+    benefitsMap[level.name] = monthlyBonus;
+  }
+  return benefitsMap;
+}
+
 async function checkMonthlyVipDemotion() {
   console.log("=== Monthly VIP Check Started ===");
   console.log(
     "Time:",
     moment().tz("Asia/Kuala_Lumpur").format("YYYY-MM-DD HH:mm:ss")
   );
+
   try {
     const vipLevels = await getVipLevelsFromDB();
     if (vipLevels.length === 0) {
@@ -340,6 +364,10 @@ async function checkMonthlyVipDemotion() {
       return { success: false, message: "VIP settings not found" };
     }
     console.log("VIP Levels:", vipLevels);
+
+    const vipBenefits = await getVipBenefitsFromDB();
+    console.log("VIP Benefits (Monthly Bonus):", vipBenefits);
+
     const lastMonthStart = moment()
       .tz("Asia/Kuala_Lumpur")
       .subtract(1, "month")
@@ -353,6 +381,20 @@ async function checkMonthlyVipDemotion() {
       .endOf("month")
       .utc()
       .toDate();
+
+    const thisMonthStart = moment()
+      .tz("Asia/Kuala_Lumpur")
+      .startOf("month")
+      .utc()
+      .toDate();
+
+    const thisMonthEnd = moment()
+      .tz("Asia/Kuala_Lumpur")
+      .endOf("month")
+      .utc()
+      .toDate();
+
+    const monthLabel = moment().tz("Asia/Kuala_Lumpur").format("MMMM YYYY");
 
     console.log("Checking deposits from:", lastMonthStart, "to:", lastMonthEnd);
 
@@ -374,17 +416,22 @@ async function checkMonthlyVipDemotion() {
     console.log("Users with VIP level:", usersWithVip.length);
 
     let demotedCount = 0;
+    let restoredCount = 0;
+    let bonusCreatedCount = 0;
 
     for (const user of usersWithVip) {
       const hasDeposit = usersWithDeposits.some(
         (depositUserId) => depositUserId.toString() === user._id.toString()
       );
 
+      let finalThisMonthVip = user.thisMonthVip || user.viplevel;
+
       if (!hasDeposit) {
         const currentThisMonthVip = user.thisMonthVip || user.viplevel;
         const newLevel = demoteVipLevel(currentThisMonthVip, vipLevels);
 
         user.thisMonthVip = newLevel;
+        finalThisMonthVip = newLevel;
         await user.save();
 
         console.log(
@@ -395,22 +442,59 @@ async function checkMonthlyVipDemotion() {
         if (user.thisMonthVip !== user.viplevel) {
           const oldThisMonthVip = user.thisMonthVip;
           user.thisMonthVip = user.viplevel;
+          finalThisMonthVip = user.viplevel;
           await user.save();
 
           console.log(
             `User ${user.username} thisMonthVip restored from ${oldThisMonthVip} to ${user.viplevel}`
+          );
+          restoredCount++;
+        }
+      }
+
+      // 派发 Monthly Bonus
+      const bonusAmount = vipBenefits[finalThisMonthVip] || 0;
+
+      if (bonusAmount > 0) {
+        const existingBonus = await VipMonthlyBonus.findOne({
+          username: user.username,
+          monthStart: thisMonthStart,
+        });
+
+        if (!existingBonus) {
+          await VipMonthlyBonus.create({
+            userId: user._id,
+            username: user.username,
+            monthStart: thisMonthStart,
+            monthEnd: thisMonthEnd,
+            monthLabel: monthLabel,
+            viplevel: user.viplevel,
+            thisMonthVip: finalThisMonthVip,
+            bonusAmount: bonusAmount,
+            claimed: false,
+          });
+
+          console.log(
+            `User ${user.username} Monthly Bonus created: ${bonusAmount} (thisMonthVip: ${finalThisMonthVip})`
+          );
+          bonusCreatedCount++;
+        } else {
+          console.log(
+            `User ${user.username} Monthly Bonus already exists for ${monthLabel}`
           );
         }
       }
     }
 
     console.log(
-      `=== Monthly VIP Check Completed. Demoted: ${demotedCount} users ===`
+      `=== Monthly VIP Check Completed ===\nDemoted: ${demotedCount}\nRestored: ${restoredCount}\nBonus Created: ${bonusCreatedCount}`
     );
 
     return {
       success: true,
       demotedCount,
+      restoredCount,
+      bonusCreatedCount,
       checkedUsers: usersWithVip.length,
     };
   } catch (error) {
@@ -421,6 +505,158 @@ async function checkMonthlyVipDemotion() {
     };
   }
 }
+
+// Admin Get VIP Monthly Bonus Report
+router.get(
+  "/admin/api/vip-monthly-bonus",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { startDate, endDate, username } = req.query;
+      const filter = {};
+
+      if (startDate && endDate) {
+        filter.monthStart = {
+          $gte: moment
+            .tz(new Date(startDate), "Asia/Kuala_Lumpur")
+            .startOf("day")
+            .toDate(),
+          $lte: moment
+            .tz(new Date(endDate), "Asia/Kuala_Lumpur")
+            .endOf("day")
+            .toDate(),
+        };
+      }
+
+      if (username) {
+        filter.username = new RegExp(username, "i");
+      }
+
+      const records = await VipMonthlyBonus.find(filter).sort({
+        createdAt: -1,
+      });
+
+      res.status(200).json({
+        success: true,
+        data: records,
+      });
+    } catch (error) {
+      console.error("Error fetching VIP monthly bonus report:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Failed to fetch VIP monthly bonus report",
+          zh: "获取VIP月度奖金报告失败",
+        },
+      });
+    }
+  }
+);
+
+// Admin Claim VIP Monthly Bonus
+router.post(
+  "/admin/api/vip-monthly-bonus/claim",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { vipMonthlyBonusId } = req.body;
+      const adminUserId = req.user.userId;
+      const admin = await adminUser.findById(adminUserId);
+
+      if (!admin) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Admin user not found",
+            zh: "未找到管理员用户",
+          },
+        });
+      }
+
+      const record = await VipMonthlyBonus.findById(vipMonthlyBonusId);
+
+      if (!record) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "VIP monthly bonus record not found",
+            zh: "VIP月度奖金记录未找到",
+          },
+        });
+      }
+
+      if (record.claimed) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Bonus already claimed",
+            zh: "奖金已被领取",
+          },
+        });
+      }
+
+      if (record.bonusAmount === 0) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "No bonus to claim",
+            zh: "没有可领取的奖金",
+          },
+        });
+      }
+
+      record.claimed = true;
+      record.claimedBy = admin.username;
+      record.claimedAt = new Date();
+      await record.save();
+
+      res.status(200).json({
+        success: true,
+        message: {
+          en: `VIP monthly bonus claimed successfully for ${record.username}`,
+          zh: `${record.username} 的VIP月度奖金已成功领取`,
+        },
+      });
+    } catch (error) {
+      console.error("Error claiming VIP monthly bonus:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
+
+// Admin Manual Run (测试用)
+router.post(
+  "/admin/api/vip-monthly-bonus/manual-run",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const result = await checkMonthlyVipDemotion();
+      res.status(200).json({
+        success: true,
+        message: {
+          en: "VIP monthly check and bonus distribution completed",
+          zh: "VIP月度检查和奖金派发完成",
+        },
+        data: result,
+      });
+    } catch (error) {
+      console.error("Error in manual run:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Manual run failed",
+          zh: "手动运行失败",
+        },
+      });
+    }
+  }
+);
 
 if (process.env.NODE_ENV !== "development") {
   cron.schedule(
@@ -433,29 +669,5 @@ if (process.env.NODE_ENV !== "development") {
     }
   );
 }
-
-// Admin Manual VIP Demotion Check (测试用)
-router.post(
-  "/admin/api/manual-vip-demotion-check",
-  // authenticateAdminToken,
-  async (req, res) => {
-    try {
-      const result = await checkMonthlyVipDemotion();
-
-      res.status(200).json({
-        success: true,
-        message: "Manual VIP demotion check completed",
-        data: result,
-      });
-    } catch (error) {
-      console.error("Error in manual VIP demotion check:", error);
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-        error: error.message,
-      });
-    }
-  }
-);
 
 module.exports = router;
