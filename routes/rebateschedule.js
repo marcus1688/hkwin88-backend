@@ -76,61 +76,27 @@ router.get(
     try {
       const { startDate, endDate } = req.query;
       const dateFilter = {};
+
       if (startDate && endDate) {
-        dateFilter.createdAt = {
-          $gte: moment(new Date(startDate)).utc().toDate(),
-          $lte: moment(new Date(endDate)).utc().toDate(),
+        dateFilter.rebateissuesdate = {
+          $gte: moment
+            .tz(new Date(startDate), "Asia/Kuala_Lumpur")
+            .startOf("day")
+            .toDate(),
+          $lte: moment
+            .tz(new Date(endDate), "Asia/Kuala_Lumpur")
+            .endOf("day")
+            .toDate(),
         };
       }
+
       const rebateLogs = await RebateLog.find(dateFilter).sort({
         createdAt: -1,
       });
-      const currentType = rebateLogs[0]?.type || "winlose";
-      const formattedLogs = rebateLogs.map((log, index) => {
-        if (currentType === "turnover") {
-          return {
-            type: "turnover",
-            id: log.id,
-            claimed: log.claimed,
-            claimedBy: log.claimedBy,
-            claimedAt: log.claimedAt,
-            username: log.username,
-            liveCasino: log.livecasino,
-            sports: log.sports,
-            slotGames: log.slot,
-            fishing: log.fishing,
-            poker: log.poker,
-            mahjong: log.mahjong,
-            eSports: log.esports,
-            horse: log.horse,
-            lottery: log.lottery,
-            formula: log.formula,
-            totalRebate: log.totalRebate,
-            totalTurnover: log.totalturnover,
-            rebateissuesdate: log.createdAt,
-          };
-        } else {
-          return {
-            type: "winlose",
-            id: log.id,
-            claimed: log.claimed,
-            claimedBy: log.claimedBy,
-            claimedAt: log.claimedAt,
-            username: log.username,
-            totaldeposit: log.totaldeposit,
-            totalwithdraw: log.totalwithdraw,
-            totalbonus: log.totalbonus,
-            totalwinlose: log.totalwinlose,
-            formula: log.formula,
-            totalRebate: log.totalRebate,
-            rebateissuesdate: log.createdAt,
-          };
-        }
-      });
+
       res.json({
         success: true,
-        data: formattedLogs,
-        type: currentType,
+        data: rebateLogs,
       });
     } catch (error) {
       console.error("Error fetching rebate report:", error);
@@ -236,26 +202,26 @@ router.post(
 );
 
 // Admin Manual Action Route (If Needed)
-// router.post(
-//   "/admin/api/rebate-calculate/manual",
-//   // authenticateAdminToken,
-//   async (req, res) => {
-//     try {
-//       await runRebateCalculation();
-//       res.json({
-//         success: true,
-//         message: "Rebate calculation completed",
-//       });
-//     } catch (error) {
-//       console.error("Error running manual rebate calculation:", error);
-//       res.status(500).json({
-//         success: false,
-//         message: "Failed to run rebate calculation",
-//         error: error.message,
-//       });
-//     }
-//   }
-// );
+router.post(
+  "/admin/api/rebate-calculate/manual",
+  // authenticateAdminToken,
+  async (req, res) => {
+    try {
+      await runRebateCalculation();
+      res.json({
+        success: true,
+        message: "Rebate calculation completed",
+      });
+    } catch (error) {
+      console.error("Error running manual rebate calculation:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to run rebate calculation",
+        error: error.message,
+      });
+    }
+  }
+);
 
 // Admin Claim Rebate for User
 router.post(
@@ -263,22 +229,23 @@ router.post(
   authenticateAdminToken,
   async (req, res) => {
     try {
-      const { username, rebateLogId } = req.body;
-      const promotion = await Promotion.findById(global.REBATE_PROMOTION_ID);
-      const transactionId = uuidv4();
-      const userId = req.user.userId;
-      const adminuser = await adminUser.findById(userId);
-      if (!adminuser) {
+      const { rebateLogId } = req.body;
+      const adminUserId = req.user.userId;
+      const admin = await adminUser.findById(adminUserId);
+
+      if (!admin) {
         return res.status(200).json({
           success: false,
           message: {
-            en: "Admin User not found",
+            en: "Admin user not found",
             zh: "未找到管理员用户",
           },
         });
       }
-      const rebateLog = await RebateLog.findById(rebateLogId);
-      if (!rebateLog) {
+
+      const record = await RebateLog.findById(rebateLogId);
+
+      if (!record) {
         return res.status(200).json({
           success: false,
           message: {
@@ -287,7 +254,8 @@ router.post(
           },
         });
       }
-      if (rebateLog.claimed) {
+
+      if (record.claimed) {
         return res.status(200).json({
           success: false,
           message: {
@@ -296,84 +264,27 @@ router.post(
           },
         });
       }
-      const user = await User.findOne({ username: username });
-      if (!user) {
+
+      if (record.totalRebate <= 0) {
         return res.status(200).json({
           success: false,
           message: {
-            en: "User not found",
-            zh: "用户未找到",
+            en: "No rebate to claim",
+            zh: "没有可领取的返水",
           },
         });
       }
-      const kioskSettings = await kioskbalance.findOne({});
-      if (kioskSettings && kioskSettings.status) {
-        const kioskResult = await updateKioskBalance(
-          "subtract",
-          rebateLog.totalRebate,
-          {
-            username: username,
-            transactionType: "rebate claim",
-            remark: `Manual rebate claim by ${adminuser.username}`,
-            processBy: adminuser.username,
-          }
-        );
-        if (!kioskResult.success) {
-          return res.status(200).json({
-            success: false,
-            message: {
-              en: "Failed to update kiosk balance",
-              zh: "更新Kiosk余额失败",
-            },
-          });
-        }
-      }
-      user.wallet += rebateLog.totalRebate;
-      await user.save();
-      const dataDate = moment(rebateLog.rebateissuesdate)
-        .tz("Asia/Kuala_Lumpur")
-        .subtract(1, "day")
-        .format("DD-MM-YYYY");
 
-      const NewBonusTransaction = new Bonus({
-        transactionId: transactionId,
-        userId: user._id,
-        username: user.username,
-        fullname: user.fullname,
-        transactionType: "bonus",
-        processBy: adminuser.username,
-        amount: rebateLog.totalRebate,
-        walletamount: user.wallet,
-        status: "approved",
-        method: "manual",
-        remark: `Rebate ${dataDate}`,
-        promotionname: promotion.maintitle,
-        promotionnameEN: promotion.maintitleEN,
-        promotionId: promotion._id,
-        processtime: "00:00:00",
-      });
-      await NewBonusTransaction.save();
+      record.claimed = true;
+      record.claimedBy = admin.username;
+      record.claimedAt = new Date();
+      await record.save();
 
-      const walletLog = new UserWalletLog({
-        userId: user._id,
-        transactionid: NewBonusTransaction.transactionId,
-        transactiontime: new Date(),
-        transactiontype: "rebate",
-        amount: rebateLog.totalRebate,
-        status: "approved",
-        promotionnameEN: dataDate,
-      });
-      await walletLog.save();
-
-      rebateLog.claimed = true;
-      rebateLog.claimedBy = adminuser.username;
-      rebateLog.claimedAt = new Date();
-      await rebateLog.save();
       res.status(200).json({
         success: true,
         message: {
-          en: `Rebate claimed successfully for ${username}`,
-          zh: `${username} 的返水已成功领取`,
+          en: `Rebate claimed successfully for ${record.username}`,
+          zh: `${record.username} 的返水已成功领取`,
         },
       });
     } catch (error) {
@@ -428,8 +339,7 @@ async function calculateWinLoseRebate(
 ) {
   try {
     console.log("Calculating for period:", { startDate, endDate });
-    const promotion = await Promotion.findById(global.REBATE_PROMOTION_ID);
-    // const transactionId = uuidv4();
+
     const deposits = await Deposit.find({
       createdAt: {
         $gte: moment(new Date(startDate)).utc().toDate(),
@@ -438,6 +348,7 @@ async function calculateWinLoseRebate(
       status: "approved",
       reverted: false,
     });
+
     const withdraws = await Withdraw.find({
       createdAt: {
         $gte: moment(new Date(startDate)).utc().toDate(),
@@ -446,6 +357,7 @@ async function calculateWinLoseRebate(
       status: "approved",
       reverted: false,
     });
+
     const bonus = await Bonus.find({
       createdAt: {
         $gte: moment(new Date(startDate)).utc().toDate(),
@@ -454,10 +366,14 @@ async function calculateWinLoseRebate(
       status: "approved",
       reverted: false,
     });
+
     const userStats = {};
+
     deposits.forEach((deposit) => {
       if (!userStats[deposit.username]) {
         userStats[deposit.username] = {
+          userId: deposit.userId,
+          userid: deposit.userid,
           totaldeposit: 0,
           totalwithdraw: 0,
           totalbonus: 0,
@@ -467,9 +383,12 @@ async function calculateWinLoseRebate(
       }
       userStats[deposit.username].totaldeposit += deposit.amount;
     });
+
     withdraws.forEach((withdraw) => {
       if (!userStats[withdraw.username]) {
         userStats[withdraw.username] = {
+          userId: withdraw.userId,
+          userid: withdraw.userid,
           totaldeposit: 0,
           totalwithdraw: 0,
           totalbonus: 0,
@@ -479,9 +398,12 @@ async function calculateWinLoseRebate(
       }
       userStats[withdraw.username].totalwithdraw += withdraw.amount;
     });
-    bonus.forEach((bonus) => {
-      if (!userStats[bonus.username]) {
-        userStats[bonus.username] = {
+
+    bonus.forEach((b) => {
+      if (!userStats[b.username]) {
+        userStats[b.username] = {
+          userId: b.userId,
+          userid: b.userid,
           totaldeposit: 0,
           totalwithdraw: 0,
           totalbonus: 0,
@@ -489,331 +411,67 @@ async function calculateWinLoseRebate(
           totalRebate: 0,
         };
       }
-      userStats[bonus.username].totalbonus += bonus.amount;
+      userStats[b.username].totalbonus += b.amount;
     });
+
+    let createdCount = 0;
 
     for (const [username, stats] of Object.entries(userStats)) {
       stats.totalwinlose = stats.totaldeposit - stats.totalwithdraw;
+
       if (stats.totalwinlose > 0) {
         stats.totalRebate = Math.abs(stats.totalwinlose) * (percentage / 100);
+
         if (stats.totalRebate >= 1) {
-          const user = await User.findOne({ username: username });
-          if (!user) {
-            console.log(`User not found: ${username}`);
+          // 检查是否已存在记录
+          const existingRecord = await RebateLog.findOne({
+            username,
+            rebateissuesdate: {
+              $gte: moment(startDate).startOf("day").toDate(),
+              $lte: moment(startDate).endOf("day").toDate(),
+            },
+          });
+
+          if (existingRecord) {
+            console.log(
+              `Record already exists for ${username} - ${dateString}`
+            );
             continue;
           }
-          const shouldClaim = user.wallet > 5;
-          const rebateLog = await RebateLog.create({
+
+          // 只创建记录，不自动发放
+          await RebateLog.create({
+            userId: stats.userId,
+            userid: stats.userid,
             username,
             totaldeposit: stats.totaldeposit,
             totalwithdraw: stats.totalwithdraw,
             totalwinlose: stats.totalwinlose,
             totalbonus: stats.totalbonus,
             totalRebate: parseFloat(stats.totalRebate.toFixed(2)),
-            rebateissuesdate: moment().utc().toDate(),
+            rebateissuesdate: moment(startDate).toDate(),
             formula: `${Math.abs(stats.totalwinlose).toFixed(
               2
             )} * ${percentage}% = ${stats.totalRebate.toFixed(2)}`,
             type: "winlose",
-            claimed: !shouldClaim,
-            claimedBy: shouldClaim ? null : "auto",
-            claimedAt: shouldClaim ? null : new Date(),
+            claimed: false,
           });
-          if (!shouldClaim) {
-            const kioskSettings = await kioskbalance.findOne({});
-            if (kioskSettings && kioskSettings.status) {
-              const kioskResult = await updateKioskBalance(
-                "subtract",
-                stats.totalRebate,
-                {
-                  username: username,
-                  transactionType: "rebate",
-                  remark: `Win/Lose Rebate`,
-                  processBy: "system",
-                }
-              );
-              if (!kioskResult.success) {
-                console.error(
-                  `Failed to update kiosk balance for user ${username}: ${kioskResult.message}`
-                );
-                continue;
-              }
-            }
-            stats.totalRebate = parseFloat(stats.totalRebate.toFixed(2));
-            user.wallet += stats.totalRebate;
-            await user.save();
-            const userTransactionId = uuidv4();
-            const NewBonusTransaction = new Bonus({
-              transactionId: userTransactionId,
-              userId: user._id,
-              username: user.username,
-              fullname: user.fullname,
-              transactionType: "bonus",
-              processBy: "system",
-              amount: stats.totalRebate,
-              walletamount: user.wallet,
-              status: "approved",
-              method: "auto",
-              remark: `Rebate ${dateString}`,
-              promotionname: promotion.maintitle,
-              promotionnameEN: promotion.maintitleEN,
-              promotionId: promotion._id,
-              processtime: "00:00:00",
-            });
-            await NewBonusTransaction.save();
 
-            const walletLog = new UserWalletLog({
-              userId: user._id,
-              transactionid: NewBonusTransaction.transactionId,
-              transactiontime: new Date(),
-              transactiontype: "rebate",
-              amount: stats.totalRebate,
-              status: "approved",
-              promotionnameEN: `${dateString}`,
-            });
-            await walletLog.save();
-
-            console.log(
-              `Rebate processed immediately for ${username}: ${stats.totalRebate}`
-            );
-          } else {
-            console.log(
-              `Rebate pending for ${username}: ${stats.totalRebate} (wallet: ${user.wallet})`
-            );
-          }
+          createdCount++;
+          console.log(
+            `Rebate record created for ${username}: ${stats.totalRebate.toFixed(
+              2
+            )}`
+          );
         }
       }
     }
-    console.log("Rebate calculation completed");
+
+    console.log(
+      `Rebate calculation completed. Created: ${createdCount} records`
+    );
   } catch (error) {
     console.error("Win/Lose rebate calculation error:", error);
-    throw error;
-  }
-}
-
-// Rebate Based on Turnover
-async function calculateTurnoverRebate() {
-  try {
-    const mockData = await getYesterdayGameLogs();
-    console.log(mockData);
-    const vipConfig = await vip.findOne();
-    if (!vipConfig) {
-      throw new Error("VIP configuration not found");
-    }
-    const uniqueUsernames = [
-      ...new Set(
-        Object.values(mockData).flatMap((category) => Object.keys(category))
-      ),
-    ];
-    console.log(`Processing users:`, uniqueUsernames);
-    const users = await User.find({ username: { $in: uniqueUsernames } });
-    const userVipMap = new Map(users.map((user) => [user.username, user]));
-    const userTurnovers = {};
-    for (const [category, userData] of Object.entries(mockData)) {
-      for (const [username, data] of Object.entries(userData)) {
-        const user = userVipMap.get(username);
-        if (!user) {
-          console.log(`User not found: ${username}`);
-          continue;
-        }
-        if (!userTurnovers[username]) {
-          userTurnovers[username] = {
-            categoryTurnover: {},
-            categoryWinloss: {},
-            total: 0,
-          };
-        }
-        const categoryKey = category.toLowerCase().replace(/\s+/g, "");
-        userTurnovers[username].categoryTurnover[categoryKey] = data.turnover;
-        userTurnovers[username].categoryWinloss[categoryKey] =
-          data.winloss || 0;
-        userTurnovers[username].total += data.turnover;
-      }
-    }
-
-    for (const [username, turnoverData] of Object.entries(userTurnovers)) {
-      const user = userVipMap.get(username);
-
-      if (user) {
-        const oldVipLevel = user.viplevel;
-        const updatedUser = await User.findOneAndUpdate(
-          { _id: user._id },
-          { $inc: { totalturnover: turnoverData.total } },
-          { new: true }
-        );
-        const latestUser = await User.findById(user._id);
-        userVipMap.set(username, latestUser);
-
-        const gameAmounts = {
-          "Slot Games": {
-            turnover: turnoverData.categoryTurnover.slotgames || 0,
-            winloss: turnoverData.categoryWinloss.slotgames || 0,
-          },
-          "Live Casino": {
-            turnover: turnoverData.categoryTurnover.livecasino || 0,
-            winloss: turnoverData.categoryWinloss.livecasino || 0,
-          },
-          Sports: {
-            turnover: turnoverData.categoryTurnover.sports || 0,
-            winloss: turnoverData.categoryWinloss.sports || 0,
-          },
-          Fishing: {
-            turnover: turnoverData.categoryTurnover.fishing || 0,
-            winloss: turnoverData.categoryWinloss.fishing || 0,
-          },
-          Poker: {
-            turnover: turnoverData.categoryTurnover.poker || 0,
-            winloss: turnoverData.categoryWinloss.poker || 0,
-          },
-          "Mah Jong": {
-            turnover: turnoverData.categoryTurnover.mahjong || 0,
-            winloss: turnoverData.categoryWinloss.mahjong || 0,
-          },
-          "E-Sports": {
-            turnover: turnoverData.categoryTurnover.esports || 0,
-            winloss: turnoverData.categoryWinloss.esports || 0,
-          },
-          Horse: {
-            turnover: turnoverData.categoryTurnover.horse || 0,
-            winloss: turnoverData.categoryWinloss.horse || 0,
-          },
-          Lottery: {
-            turnover: turnoverData.categoryTurnover.lottery || 0,
-            winloss: turnoverData.categoryWinloss.lottery || 0,
-          },
-        };
-
-        let userGameData = await UserGameData.findOne({ userId: user._id });
-        if (!userGameData) {
-          userGameData = new UserGameData({
-            userId: user._id,
-            username: username,
-            gameHistory: new Map(),
-          });
-        }
-
-        const yesterday = moment()
-          .tz("Australia/Sydney")
-          .subtract(1, "day")
-          .format("DD-MM-YYYY");
-        const twoMonthsAgo = moment()
-          .tz("Australia/Sydney")
-          .subtract(2, "months");
-
-        const historyEntries = Array.from(userGameData.gameHistory.entries());
-        const filteredEntries = historyEntries.filter(([date]) => {
-          const entryDate = moment(date, "DD-MM-YYYY");
-          return entryDate.isAfter(twoMonthsAgo);
-        });
-
-        filteredEntries.push([yesterday, gameAmounts]);
-        userGameData.gameHistory = new Map(filteredEntries);
-
-        await userGameData.save();
-
-        console.log(
-          `Updated game history for user ${username} for date ${yesterday}`
-        );
-      }
-    }
-
-    const userRebates = {};
-    for (const [category, userData] of Object.entries(mockData)) {
-      for (const [username, data] of Object.entries(userData)) {
-        const user = userVipMap.get(username);
-        if (!user) continue;
-        if (!userRebates[username]) {
-          userRebates[username] = {
-            totalRebate: 0,
-            categoryTurnover: userTurnovers[username].categoryTurnover,
-            categoryRebates: {},
-            formula: [],
-          };
-        }
-        let rebatePercentage = 0;
-        const vipLevel = vipConfig.vipLevels.find(
-          (level) => level.name === user.viplevel
-        );
-        if (vipLevel) {
-          const rebateValue = vipLevel.benefits.get("Rebate %");
-          rebatePercentage =
-            rebateValue === "no" ? 0 : parseFloat(rebateValue) || 0;
-        }
-        const categoryKey = category.toLowerCase().replace(/\s+/g, "");
-        const categoryRebate = data.turnover * rebatePercentage;
-        userRebates[username].categoryRebates[categoryKey] = categoryRebate;
-        userRebates[username].totalRebate += categoryRebate;
-        userRebates[username].formula.push(
-          `${category} (VIP ${user.viplevel}): ${
-            data.turnover
-          } * ${rebatePercentage}% = ${(categoryRebate / 100).toFixed(2)}`
-        );
-      }
-    }
-
-    for (const [username, rebateData] of Object.entries(userRebates)) {
-      const user = userVipMap.get(username);
-      if (!user) continue;
-      rebateData.totalRebate = parseFloat(
-        (rebateData.totalRebate / 100).toFixed(2)
-      );
-      if (rebateData.totalRebate > 0) {
-        const kioskSettings = await kioskbalance.findOne({});
-        if (kioskSettings && kioskSettings.status) {
-          const kioskResult = await updateKioskBalance(
-            "subtract",
-            rebateData.totalRebate,
-            {
-              username: username,
-              transactionType: "rebate",
-              remark: `Turnover Rebate`,
-              processBy: "system",
-            }
-          );
-          if (!kioskResult.success) {
-            console.error(
-              `Failed to update kiosk balance for user ${username}: ${kioskResult.message}`
-            );
-            continue;
-          }
-        }
-        await User.findOneAndUpdate(
-          { _id: user._id },
-          { $inc: { wallet: rebateData.totalRebate } }
-        );
-        await RebateLog.create({
-          username,
-          categoryTurnover: rebateData.categoryTurnover,
-          totalRebate: rebateData.totalRebate,
-          formula: rebateData.formula.join("\n"),
-          type: "turnover",
-          rebateissuesdate: new Date(),
-          totalturnover: userTurnovers[username].total,
-          slot: rebateData.categoryTurnover.slotgames || 0,
-          livecasino: rebateData.categoryTurnover.livecasino || 0,
-          sports: rebateData.categoryTurnover.sports || 0,
-          fishing: rebateData.categoryTurnover.fishing || 0,
-          poker: rebateData.categoryTurnover.poker || 0,
-          mahjong: rebateData.categoryTurnover.mahjong || 0,
-          esports: rebateData.categoryTurnover["e-sports"] || 0,
-          horse: rebateData.categoryTurnover.horse || 0,
-          lottery: rebateData.categoryTurnover.lottery || 0,
-        });
-        await UserWalletLog.create({
-          userId: user._id,
-          transactiontime: new Date(),
-          transactiontype: "rebate",
-          amount: rebateData.totalRebate,
-          status: "approved",
-          promotionnameEN: `Rebate ${moment()
-            .tz("Australia/Sydney")
-            .subtract(1, "day")
-            .format("YYYY-MM-DD")}`,
-        });
-      }
-    }
-  } catch (error) {
-    console.error("Turnover rebate calculation error:", error);
     throw error;
   }
 }

@@ -3,6 +3,13 @@ const moment = require("moment");
 
 const rebateLogSchema = new mongoose.Schema(
   {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    userid: {
+      type: String,
+    },
     username: {
       type: String,
     },
