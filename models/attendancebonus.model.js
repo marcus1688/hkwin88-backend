@@ -12,6 +12,9 @@ const attendanceBonusSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    userid: {
+      type: String,
+    },
     weekStart: {
       type: Date,
       required: true,

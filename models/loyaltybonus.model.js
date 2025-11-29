@@ -7,6 +7,9 @@ const loyaltyBonusSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    userid: {
+      type: String,
+    },
     username: {
       type: String,
       required: true,

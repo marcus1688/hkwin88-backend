@@ -8,6 +8,7 @@ const depositschema = new mongoose.Schema(
       unique: true,
     },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    userid: { type: String },
     username: {
       type: String,
     },

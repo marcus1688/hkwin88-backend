@@ -8,6 +8,9 @@ const vipMonthlyBonusSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    userid: {
+      type: String,
+    },
     username: {
       type: String,
       required: true,

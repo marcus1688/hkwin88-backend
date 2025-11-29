@@ -3,16 +3,17 @@ const router = express.Router();
 const cron = require("node-cron");
 const moment = require("moment-timezone");
 const LoyaltyBonus = require("../models/loyaltybonus.model");
+const { adminUser } = require("../models/adminuser.model");
 const Deposit = require("../models/deposit.model");
-const User = require("../models/users.model");
 const { authenticateAdminToken } = require("../auth/adminAuth");
+const { User } = require("../models/users.model");
 const TIMEZONE = "Asia/Kuala_Lumpur";
 
 const LOYALTY_TIERS = [
-  { min: 50000, max: Infinity, tier: "tier4", bonus: 294 },
-  { min: 25000, max: 49999, tier: "tier3", bonus: 194 },
-  { min: 5000, max: 24999, tier: "tier2", bonus: 44 },
-  { min: 1000, max: 4999, tier: "tier1", bonus: 14 },
+  { min: 50000, max: Infinity, tier: "tier4", bonus: 588 },
+  { min: 25000, max: 49999, tier: "tier3", bonus: 388 },
+  { min: 5000, max: 24999, tier: "tier2", bonus: 88 },
+  { min: 1000, max: 4999, tier: "tier1", bonus: 28 },
   { min: 0, max: 999, tier: "none", bonus: 0 },
 ];
 
@@ -120,9 +121,11 @@ const runLoyaltyBonusCalculation = async (isManual = false) => {
         skippedCount++;
         continue;
       }
+      const user = await User.findById(userId);
       const tierInfo = getTierInfo(totalDeposit);
       await LoyaltyBonus.create({
         userId,
+        userid: user?.userid || "",
         username,
         periodStart,
         periodEnd,
@@ -220,14 +223,15 @@ router.get(
   }
 );
 
-// POST - Claim loyalty bonus
+// Admin Claim Loyalty Bonus
 router.post(
   "/admin/api/loyalty-bonus/claim",
   authenticateAdminToken,
   async (req, res) => {
     try {
       const { loyaltyBonusId } = req.body;
-      const adminUsername = req.admin.username;
+      const adminUserId = req.user.userId;
+      const admin = await adminUser.findById(adminUserId);
 
       const record = await LoyaltyBonus.findById(loyaltyBonusId);
 
@@ -262,7 +266,7 @@ router.post(
       }
 
       record.claimed = true;
-      record.claimedBy = adminUsername;
+      record.claimedBy = admin.username;
       record.claimedAt = moment.tz(TIMEZONE).toDate();
       await record.save();
 
@@ -285,8 +289,7 @@ router.post(
     }
   }
 );
-
-// POST - Manual run
+// Admin Manual run
 router.post(
   "/admin/api/loyalty-bonus/manual-run",
   authenticateAdminToken,
@@ -307,7 +310,7 @@ router.post(
   }
 );
 
-// GET - Tier configuration (for frontend reference)
+// Admin Get Tier configuration (for frontend reference)
 router.get(
   "/admin/api/loyalty-bonus/tiers",
   authenticateAdminToken,

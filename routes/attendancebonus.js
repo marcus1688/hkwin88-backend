@@ -56,6 +56,7 @@ async function runAttendanceBonusCalculation() {
       if (!userDailyDeposits[username]) {
         userDailyDeposits[username] = {
           userId: deposit.userId,
+          userid: deposit.userid,
           days: new Set(),
         };
       }
@@ -84,6 +85,7 @@ async function runAttendanceBonusCalculation() {
       }
       await AttendanceBonus.create({
         userId: data.userId,
+        userid: data.userid,
         username,
         weekStart,
         weekEnd,

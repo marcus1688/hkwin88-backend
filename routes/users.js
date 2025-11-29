@@ -3621,6 +3621,7 @@ router.patch(
       const newCashOut = new UserWalletCashOut({
         transactionId: uuidv4(),
         userId: user._id,
+        userid: user.userid,
         username: user.username,
         fullname: user.fullname,
         method: "manual",
@@ -4933,6 +4934,7 @@ router.post(
       const newDeposit = new Deposit({
         transactionId,
         userId: user._id,
+        userid: user.userid,
         username: user.username,
         fullname: user.fullname,
         bankid: bank._id,
@@ -5000,6 +5002,7 @@ router.post(
         currentBalance: updatedBank.currentbalance,
         processby: adminuser.username,
         qrimage: bank.qrimage,
+        userid: user.userid,
         playerusername: user.username,
         playerfullname: user.fullname,
         transactiontype: "deposit",
@@ -5113,6 +5116,7 @@ router.post(
       const newWithdraw = new Withdraw({
         transactionId,
         userId: user._id,
+        userid: user.userid,
         username: user.username,
         fullname: user.fullname,
         bankid: bank._id,
@@ -5182,6 +5186,7 @@ router.post(
         currentBalance: updatedBank.currentbalance,
         processby: adminuser.username,
         qrimage: bank.qrimage,
+        userid: user.userid,
         playerusername: user.username,
         playerfullname: user.fullname,
         transactiontype: "withdraw",
@@ -5285,6 +5290,7 @@ router.post(
       const newBonus = new Bonus({
         transactionId,
         userId: user._id,
+        userid: user.userid,
         username: user.username,
         fullname: user.fullname,
         transactionType: "bonus",

@@ -14,6 +14,9 @@ const bankTransactionLogSchema = new mongoose.Schema(
     currentBalance: Number,
     processby: String,
     qrimage: String,
+    userid: {
+      type: String,
+    },
     playerusername: String,
     playerfullname: String,
     transactiontype: String,

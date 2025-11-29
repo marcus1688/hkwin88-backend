@@ -441,6 +441,7 @@ async function checkMonthlyVipDemotion() {
         if (!existingBonus) {
           await VipMonthlyBonus.create({
             userId: user._id,
+            userid: user.userid,
             username: user.username,
             monthStart: thisMonthStart,
             monthEnd: thisMonthEnd,
