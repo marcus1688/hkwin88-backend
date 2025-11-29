@@ -456,6 +456,10 @@ async function checkMonthlyVipDemotion() {
       }
     }
 
+    console.log(
+      `[VIP Monthly Check] Completed - Checked: ${usersWithVip.length}, Demoted: ${demotedCount}, Restored: ${restoredCount}, Bonus Created: ${bonusCreatedCount}`
+    );
+
     return {
       success: true,
       demotedCount,
@@ -464,7 +468,7 @@ async function checkMonthlyVipDemotion() {
       checkedUsers: usersWithVip.length,
     };
   } catch (error) {
-    console.error("Error in monthly VIP check:", error);
+    console.error("[VIP Monthly Check] Error:", error);
     return {
       success: false,
       error: error.message,
