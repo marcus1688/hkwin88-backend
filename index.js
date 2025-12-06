@@ -118,7 +118,7 @@ global.AGENT_COMMISSION_PROMOTION_ID = "6890a5e7596aa38349ade97d";
 global.REBATE_PROMOTION_ID = "68909e951af19dfb128af5be";
 
 const allowedOrigins = [
-  "https://www.mysteryclub88.com",
+  "https://www.mysteryclub77.com",
   "capacitor://localhost",
   "ionic://localhost",
   // "http://192.168.68.59:3005",
