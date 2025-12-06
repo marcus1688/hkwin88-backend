@@ -118,10 +118,7 @@ global.AGENT_COMMISSION_PROMOTION_ID = "6890a5e7596aa38349ade97d";
 global.REBATE_PROMOTION_ID = "68909e951af19dfb128af5be";
 
 const allowedOrigins = [
-  "https://mysteryclub88.com",
   "https://www.mysteryclub88.com",
-  "https://www.ezwin9.com",
-  "https://vercel.com/marcus-projects-3c8bb325/stash88-frontend/4aq13rrn8TXDxRHJgf2TbCgfG8SK",
   "capacitor://localhost",
   "ionic://localhost",
   // "http://192.168.68.59:3005",
