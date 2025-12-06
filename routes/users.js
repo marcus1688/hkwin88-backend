@@ -2772,6 +2772,7 @@ router.get("/admin/api/allusers", authenticateAdminToken, async (req, res) => {
           isVerified: 1,
           totaldeposit: 1,
           totalwithdraw: 1,
+          totalbonus: 1,
           winlose: 1,
           wallet: "$walletAmount",
           wallettwo: "$walletTwoAmount",
