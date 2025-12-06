@@ -2824,6 +2824,7 @@ router.post(
       phoneNumbers = [],
       bankAccounts = [],
       referralCode,
+      freeCreditApply,
     } = req.body;
     if (!fullname || !phoneNumbers.length) {
       return res.status(200).json({
@@ -2962,6 +2963,83 @@ router.post(
         }
       }
 
+      if (freeCreditApply) {
+        try {
+          const selectedKiosk = await Kiosk.findOne({ name: /joker x2/i });
+          const freeCreditPromotion = await Promotion.findOne({
+            $or: [
+              { maintitleEN: { $regex: /Free Credit/i } },
+              { maintitle: { $regex: /免费积分/ } },
+            ],
+          });
+
+          if (selectedKiosk && freeCreditPromotion) {
+            const bonusAmount = Number(freeCreditPromotion.bonusexact);
+            const transferAmount = bonusAmount / 2; // ✅ Transfer In 是 bonusexact / 2
+
+            // Step 1: Transfer In (bonusexact / 2)
+            const transferUrl = `${API_URL}${selectedKiosk.transferInAPI}/${newUser._id}`;
+            const transferResponse = await fetch(transferUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: req.headers.authorization,
+              },
+              body: JSON.stringify({
+                transferAmount: transferAmount,
+              }),
+            });
+            const transferResult = await transferResponse.json();
+
+            if (transferResult.success) {
+              // Step 2: Create Bonus Record (正常 bonusexact)
+              const transactionId = uuidv4();
+              const adminuser = await adminUser.findById(req.user.userId);
+
+              const newBonus = new Bonus({
+                transactionId,
+                userId: newUser._id,
+                userid: newUser.userid,
+                username: newUser.username,
+                fullname: newUser.fullname,
+                transactionType: "bonus",
+                processBy: adminuser?.username || "system",
+                amount: bonusAmount,
+                walletamount: 0,
+                status: "approved",
+                method: "admin",
+                remark: "Free Credit Apply",
+                game: selectedKiosk.name,
+                promotionname: freeCreditPromotion.maintitle,
+                promotionnameEN: freeCreditPromotion.maintitleEN,
+                promotionId: freeCreditPromotion._id,
+                processtime: "0s",
+              });
+              await newBonus.save();
+
+              await User.findByIdAndUpdate(newUser._id, {
+                $inc: { totalbonus: bonusAmount },
+              });
+
+              const walletLog = new UserWalletLog({
+                userId: newUser._id,
+                transactionid: transactionId,
+                transactiontime: new Date(),
+                transactiontype: "bonus",
+                amount: bonusAmount,
+                status: "approved",
+                remark: "Free Credit Apply",
+                game: selectedKiosk.name,
+                promotionnameCN: freeCreditPromotion.maintitle,
+                promotionnameEN: freeCreditPromotion.maintitleEN,
+              });
+              await walletLog.save();
+            }
+          }
+        } catch (error) {
+          console.error("Free Credit Apply error:", error.message);
+        }
+      }
       res.status(200).json({
         success: true,
         message: {
