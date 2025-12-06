@@ -244,6 +244,7 @@ router.post(
       const NewBonusTransaction = new Bonus({
         transactionId: transactionId,
         userId: userid,
+        userid: user.userid,
         username: user.username,
         fullname: user.fullname,
         transactionType: "bonus",
