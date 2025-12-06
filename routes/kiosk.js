@@ -742,4 +742,57 @@ router.post(
   }
 );
 
+// Get All User Kiosk Game IDs
+router.post(
+  "/admin/api/kiosk/get-user-kiosk-ids",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { userId } = req.body;
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User not found",
+            zh: "找不到用户",
+          },
+        });
+      }
+
+      const kiosks = await Kiosk.find({
+        isActive: true,
+        databaseGameID: { $exists: true, $ne: "" },
+      });
+
+      const kioskData = kiosks.map((kiosk) => {
+        const userKioskId = kiosk.databaseGameID
+          ? user[kiosk.databaseGameID] || ""
+          : "";
+        return {
+          _id: kiosk._id,
+          name: kiosk.name,
+          userKioskId,
+          databaseGameID: kiosk.databaseGameID,
+          changePasswordApi: kiosk.changePasswordApi || null,
+        };
+      });
+
+      res.status(200).json({
+        success: true,
+        data: kioskData,
+      });
+    } catch (error) {
+      console.error("Error getting user kiosk IDs:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
+
 module.exports = router;
