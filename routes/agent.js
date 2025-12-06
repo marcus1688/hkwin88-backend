@@ -496,7 +496,7 @@ router.get(
         const directDownlines = await User.find({
           "referralBy.user_id": parentId,
         }).select(
-          "username createdAt status lastLogin lastdepositdate viplevel totalturnover totaldeposit email"
+          "username createdAt status lastLogin lastdepositdate viplevel totalturnover totaldeposit email userid"
         );
         let allDownlines = [];
         for (const user of directDownlines) {
