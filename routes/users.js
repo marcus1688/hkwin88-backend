@@ -2292,12 +2292,22 @@ router.post(
           });
         }
       }
-      if (
-        user.firstDepositDate &&
-        moment(deposit.createdAt).isSame(moment(user.firstDepositDate))
-      ) {
+      if (deposit.newDeposit === true) {
         user.firstDepositDate = null;
         deposit.newDeposit = false;
+      }
+
+      if (user.lastdepositdate) {
+        const previousDeposit = await Deposit.findOne({
+          userId: user._id,
+          status: "approved",
+          reverted: { $ne: true },
+          _id: { $ne: deposit._id },
+        }).sort({ createdAt: -1 });
+
+        user.lastdepositdate = previousDeposit
+          ? previousDeposit.createdAt
+          : null;
       }
 
       user.totaldeposit -= deposit.amount;
