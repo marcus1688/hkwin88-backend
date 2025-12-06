@@ -6141,5 +6141,66 @@ router.patch(
     }
   }
 );
+
+// Batch Update All Users VIP Level
+router.post(
+  "/admin/api/update-all-vip-levels",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const users = await User.find({});
+
+      let updatedCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+      const updateResults = [];
+
+      for (const user of users) {
+        const result = await checkAndUpdateVIPLevel(user._id);
+
+        if (result.success) {
+          if (result.message === "VIP level updated") {
+            updatedCount++;
+            updateResults.push({
+              userid: user.userid,
+              username: user.username,
+              oldLevel: result.oldLevel || "None",
+              newLevel: result.newLevel,
+              totalDeposit: user.totaldeposit,
+            });
+          } else {
+            skippedCount++;
+          }
+        } else {
+          errorCount++;
+        }
+      }
+
+      res.json({
+        success: true,
+        message: {
+          en: `VIP levels updated. Updated: ${updatedCount}, Skipped: ${skippedCount}, Errors: ${errorCount}`,
+          zh: `VIP等级已更新。已更新: ${updatedCount}, 已跳过: ${skippedCount}, 错误: ${errorCount}`,
+        },
+        data: {
+          totalUsers: users.length,
+          updatedCount,
+          skippedCount,
+          errorCount,
+          updates: updateResults,
+        },
+      });
+    } catch (error) {
+      console.error("Error updating all VIP levels:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Failed to update VIP levels",
+          zh: "更新VIP等级失败",
+        },
+      });
+    }
+  }
+);
 module.exports = router;
 module.exports.checkAndUpdateVIPLevel = checkAndUpdateVIPLevel;
