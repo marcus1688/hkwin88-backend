@@ -61,8 +61,8 @@ if (process.env.NODE_ENV !== "development") {
     }
   );
   console.log(
-    `Rebate calculation job scheduled for 3:00 AM (Asia/Kuala_Lumpur). Next run: ${getNextRunTime(
-      3,
+    `Rebate calculation job scheduled for 12:00 AM (Asia/Kuala_Lumpur). Next run: ${getNextRunTime(
+      0,
       0
     )}`
   );
