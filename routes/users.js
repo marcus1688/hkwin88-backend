@@ -2682,6 +2682,7 @@ router.get("/admin/api/allusers", authenticateAdminToken, async (req, res) => {
       status: "status",
       totalDeposit: "totaldeposit",
       totalWithdraw: "totalwithdraw",
+      totalBonus: "totalbonus",
       winLose: "winlose",
     };
 
