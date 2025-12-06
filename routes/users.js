@@ -2655,12 +2655,16 @@ router.get("/admin/api/allusers", authenticateAdminToken, async (req, res) => {
           $or: [
             { username: new RegExp(search, "i") },
             { fullname: new RegExp(search, "i") },
-            ...(isNaN(search)
-              ? []
-              : [
-                  { phonenumber: parseInt(search) },
-                  { userid: parseInt(search) },
-                ]),
+            {
+              $expr: {
+                $regexMatch: {
+                  input: { $toString: "$phonenumber" },
+                  regex: search,
+                  options: "i",
+                },
+              },
+            },
+            ...(isNaN(search) ? [] : [{ userid: parseInt(search) }]),
           ],
         }
       : {};
@@ -2832,9 +2836,13 @@ router.post(
     }
     const normalizedUsername = fullname.toLowerCase().replace(/\s+/g, "");
     const normalizedFullname = fullname.toLowerCase().replace(/\s+/g, "");
-    const formattedPhoneNumbers = phoneNumbers.map((phone) =>
-      String(phone).startsWith("852") ? String(phone) : `852${phone}`
-    );
+    const formattedPhoneNumbers = phoneNumbers.map((phone) => {
+      const phoneStr = String(phone);
+      if (phoneStr.length === 8) {
+        return `852${phoneStr}`;
+      }
+      return phoneStr;
+    });
     const primaryPhone = formattedPhoneNumbers[0];
     try {
       const existingUser = await User.findOne({
@@ -5360,5 +5368,420 @@ router.post(
   }
 );
 
+// Import用户数据
+router.post(
+  "/admin/api/import-users",
+  authenticateAdminToken,
+  async (req, res) => {
+    const { users } = req.body;
+    if (!users || !Array.isArray(users) || !users.length) {
+      return res.status(200).json({
+        success: false,
+        message: {
+          en: "No users to import",
+          zh: "没有用户数据",
+        },
+      });
+    }
+    const results = {
+      success: [],
+      failed: [],
+      skipped: [],
+    };
+    const kiosks = await Kiosk.find({
+      isActive: true,
+      registerGameAPI: { $exists: true, $ne: "" },
+    });
+    const API_URL = process.env.API_URL || "http://localhost:3001/api/";
+
+    for (const user of users) {
+      const { id, fullname, phoneNumbers } = user;
+      if (!fullname || !phoneNumbers?.length) {
+        results.failed.push({
+          id,
+          fullname,
+          reason: "Missing fullname or phone",
+        });
+        continue;
+      }
+      const normalizedUsername = fullname.toLowerCase().replace(/\s+/g, "");
+      const normalizedFullname = fullname.toLowerCase().replace(/\s+/g, "");
+      const formattedPhoneNumbers = phoneNumbers.map((phone) => {
+        const phoneStr = String(phone);
+        if (phoneStr.length === 8) {
+          return `852${phoneStr}`;
+        }
+        return phoneStr;
+      });
+      const primaryPhone = formattedPhoneNumbers[0];
+      try {
+        // 只检查 userid 是否重复
+        const newUserId = parseInt(id);
+        const existingUser = await User.findOne({ userid: newUserId });
+        if (existingUser) {
+          results.skipped.push({ id, fullname, reason: "Duplicate userid" });
+          continue;
+        }
+
+        await general.findOneAndUpdate(
+          { userIdCounter: { $lt: newUserId } },
+          { $set: { userIdCounter: newUserId } },
+          { sort: { createdAt: -1 } }
+        );
+        // 生成默认密码
+        const defaultPassword = "123456";
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(defaultPassword, salt);
+        // 生成 referral 相关
+        const newReferralCode = await generateUniqueReferralCode();
+        const referralLink = generateReferralLink(newReferralCode);
+        const referralQrCode = await generateQRWithLogo(referralLink);
+        const newUser = await User.create({
+          userid: newUserId,
+          username: normalizedUsername,
+          fullname: normalizedFullname,
+          password: hashedPassword,
+          phonenumber: primaryPhone,
+          phoneNumbers: formattedPhoneNumbers,
+          registerIp: "csv import",
+          referralLink,
+          referralCode: newReferralCode,
+          referralQrCode,
+          viplevel: null,
+          gameId: await generateUniqueGameId(),
+        });
+
+        // 注册 Kiosk
+        for (const kiosk of kiosks) {
+          try {
+            const url = `${API_URL}${kiosk.registerGameAPI}/${newUser._id}`;
+            const response = await fetch(url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: req.headers.authorization,
+              },
+              body: JSON.stringify({}),
+            });
+            const text = await response.text();
+            try {
+              JSON.parse(text);
+            } catch (parseError) {
+              console.error(`[Import] ${kiosk.name} - Invalid JSON response`);
+            }
+          } catch (error) {
+            console.error(`[Import] ${kiosk.name} error:`, error.message);
+          }
+        }
+
+        results.success.push({ id: newUserId, fullname });
+      } catch (error) {
+        console.error(`Import error for ${fullname}:`, error.message);
+        results.failed.push({ id, fullname, reason: error.message });
+      }
+    }
+    res.status(200).json({
+      success: true,
+      message: {
+        en: `Import complete. Success: ${results.success.length}, Skipped: ${results.skipped.length}, Failed: ${results.failed.length}`,
+        zh: `导入完成。成功: ${results.success.length}, 跳过: ${results.skipped.length}, 失败: ${results.failed.length}`,
+      },
+      data: results,
+    });
+  }
+);
+
+// 注册游戏
+router.post(
+  "/admin/api/register-kiosks-batch",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const kiosks = await Kiosk.find({
+        isActive: true,
+        registerGameAPI: { $exists: true, $ne: "" },
+      });
+      if (!kiosks.length) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "No active kiosks found",
+            zh: "没有找到活跃的 Kiosk",
+          },
+        });
+      }
+
+      const users = await User.find({
+        $or: [
+          { jokerGameName: { $exists: false } },
+          { jokerGameName: null },
+          { jokerGameName: "" },
+        ],
+      });
+
+      console.log(
+        `[Batch Register] 找到 ${users.length} 个没有 jokerGameName 的用户`
+      );
+      console.log(
+        `[Batch Register] 活跃 Kiosks: ${kiosks.map((k) => k.name).join(", ")}`
+      );
+
+      const API_URL = process.env.API_URL || "http://localhost:3001/api/";
+      const results = {
+        success: [],
+        failed: [],
+      };
+
+      // delay function
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      for (const user of users) {
+        console.log(
+          `\n[Batch Register] 处理用户: ${user.userid} - ${user.fullname}`
+        );
+
+        const userResults = {
+          userid: user.userid,
+          fullname: user.fullname,
+          kiosks: [],
+        };
+
+        for (const kiosk of kiosks) {
+          try {
+            const url = `${API_URL}${kiosk.registerGameAPI}/${user._id}`;
+            console.log(`[Batch Register] Calling: ${url}`);
+
+            const response = await fetch(url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: req.headers.authorization,
+              },
+              body: JSON.stringify({}),
+            });
+            const text = await response.text();
+            console.log(`[Batch Register] ${kiosk.name} response:`, text);
+
+            try {
+              const result = JSON.parse(text);
+              userResults.kiosks.push({
+                name: kiosk.name,
+                success: result.success || false,
+                message: result.message || text,
+              });
+            } catch (parseError) {
+              userResults.kiosks.push({
+                name: kiosk.name,
+                success: false,
+                message: "Invalid JSON response",
+              });
+            }
+          } catch (error) {
+            console.log(`[Batch Register] ${kiosk.name} error:`, error.message);
+            userResults.kiosks.push({
+              name: kiosk.name,
+              success: false,
+              message: error.message,
+            });
+          }
+        }
+
+        const allSuccess = userResults.kiosks.every((k) => k.success);
+        if (allSuccess) {
+          results.success.push(userResults);
+        } else {
+          results.failed.push(userResults);
+        }
+
+        // 等 2 秒再处理下一个用户
+        await delay(2000);
+      }
+
+      console.log(
+        `\n[Batch Register] 完成！成功: ${results.success.length}, 失败: ${results.failed.length}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: {
+          en: `Batch registration complete. Success: ${results.success.length}, Failed: ${results.failed.length}`,
+          zh: `批量注册完成。成功: ${results.success.length}, 失败: ${results.failed.length}`,
+        },
+        data: {
+          totalUsers: users.length,
+          totalKiosks: kiosks.length,
+          results,
+        },
+      });
+    } catch (error) {
+      console.error("Batch kiosk registration error:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
+
+// 检查哪个还没注册的
+router.post(
+  "/admin/api/register-kiosks-batch2",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      // 找没有 jokerGameName 或 jokerGameTwoName 的用户
+      const users = await User.find({
+        $or: [
+          { jokerGameName: { $exists: false } },
+          { jokerGameName: null },
+          { jokerGameName: "" },
+          { jokerGameTwoName: { $exists: false } },
+          { jokerGameTwoName: null },
+          { jokerGameTwoName: "" },
+        ],
+      });
+
+      const userIds = users.map((u) => ({
+        id: u._id,
+        userid: u.userid,
+        needJokerX2: !u.jokerGameName,
+        needJokerX5: !u.jokerGameTwoName,
+      }));
+
+      console.log(`[Batch Register] 找到 ${users.length} 个需要注册的用户:`);
+      console.log(JSON.stringify(userIds, null, 2));
+
+      // return res.status(200).json({
+      //   success: true,
+      //   total: users.length,
+      //   users: userIds,
+      // });
+      const API_URL = process.env.API_URL || "http://localhost:3001/";
+      const results = {
+        success: [],
+        failed: [],
+      };
+
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      for (const user of users) {
+        console.log(
+          `\n[Batch Register] 处理用户: ${user.userid} - ${user.fullname}`
+        );
+
+        const userResults = {
+          userid: user.userid,
+          fullname: user.fullname,
+          registered: [],
+        };
+
+        // 检查 jokerGameName
+        if (!user.jokerGameName) {
+          try {
+            const url = `${API_URL}jokerx2/register/${user._id}`;
+            console.log(`[Batch Register] Calling jokerx2: ${url}`);
+
+            const response = await fetch(url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: req.headers.authorization,
+              },
+              body: JSON.stringify({}),
+            });
+            const text = await response.text();
+            console.log(`[Batch Register] jokerx2 response:`, text);
+
+            const result = JSON.parse(text);
+            userResults.registered.push({
+              kiosk: "jokerx2",
+              success: result.success || false,
+              message: result.message || text,
+            });
+          } catch (error) {
+            console.log(`[Batch Register] jokerx2 error:`, error.message);
+            userResults.registered.push({
+              kiosk: "jokerx2",
+              success: false,
+              message: error.message,
+            });
+          }
+
+          await delay(2000);
+        }
+
+        // 检查 jokerGameTwoName
+        if (!user.jokerGameTwoName) {
+          try {
+            const url = `${API_URL}jokerx5/register/${user._id}`;
+            console.log(`[Batch Register] Calling jokerx5: ${url}`);
+
+            const response = await fetch(url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: req.headers.authorization,
+              },
+              body: JSON.stringify({}),
+            });
+            const text = await response.text();
+            console.log(`[Batch Register] jokerx5 response:`, text);
+
+            const result = JSON.parse(text);
+            userResults.registered.push({
+              kiosk: "jokerx5",
+              success: result.success || false,
+              message: result.message || text,
+            });
+          } catch (error) {
+            console.log(`[Batch Register] jokerx5 error:`, error.message);
+            userResults.registered.push({
+              kiosk: "jokerx5",
+              success: false,
+              message: error.message,
+            });
+          }
+
+          await delay(2000);
+        }
+
+        const allSuccess = userResults.registered.every((r) => r.success);
+        if (allSuccess) {
+          results.success.push(userResults);
+        } else {
+          results.failed.push(userResults);
+        }
+      }
+
+      console.log(
+        `\n[Batch Register] 完成！成功: ${results.success.length}, 失败: ${results.failed.length}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: {
+          en: `Batch registration complete. Success: ${results.success.length}, Failed: ${results.failed.length}`,
+          zh: `批量注册完成。成功: ${results.success.length}, 失败: ${results.failed.length}`,
+        },
+        data: {
+          totalUsers: users.length,
+          results,
+        },
+      });
+    } catch (error) {
+      console.error("Batch kiosk registration error:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
 module.exports = router;
 module.exports.checkAndUpdateVIPLevel = checkAndUpdateVIPLevel;
