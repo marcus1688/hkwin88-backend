@@ -5491,6 +5491,128 @@ router.post(
   }
 );
 
+// Import用户totalDeposit数据
+router.post(
+  "/admin/api/import-totaldeposit",
+
+  async (req, res) => {
+    const { users } = req.body;
+    if (!users || !Array.isArray(users) || !users.length) {
+      return res.status(200).json({
+        success: false,
+        message: {
+          en: "No data to import",
+          zh: "没有数据",
+        },
+      });
+    }
+
+    const results = {
+      success: [],
+      failed: [],
+      skipped: [],
+    };
+
+    for (const user of users) {
+      const { userid, totalDeposit } = user;
+
+      if (!userid || totalDeposit === undefined) {
+        results.failed.push({
+          userid,
+          reason: "Missing userid or totalDeposit",
+        });
+        continue;
+      }
+
+      try {
+        const existingUser = await User.findOne({ userid: parseInt(userid) });
+
+        if (!existingUser) {
+          results.skipped.push({ userid, reason: "User not found" });
+          continue;
+        }
+
+        await User.updateMany(
+          { userid: parseInt(userid) },
+          { $set: { totaldeposit: parseFloat(totalDeposit) } }
+        );
+
+        results.success.push({ userid, totalDeposit });
+      } catch (error) {
+        console.error(
+          `Import totalDeposit error for ${userid}:`,
+          error.message
+        );
+        results.failed.push({ userid, reason: error.message });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: {
+        en: `Import complete. Success: ${results.success.length}, Skipped: ${results.skipped.length}, Failed: ${results.failed.length}`,
+        zh: `导入完成。成功: ${results.success.length}, 跳过: ${results.skipped.length}, 失败: ${results.failed.length}`,
+      },
+      data: results,
+    });
+  }
+);
+
+// Import用户totalWithdraw数据
+router.post("/admin/api/import-totalwithdraw", async (req, res) => {
+  const { users } = req.body;
+  if (!users || !Array.isArray(users) || !users.length) {
+    return res.status(200).json({
+      success: false,
+      message: {
+        en: "No data to import",
+        zh: "没有数据",
+      },
+    });
+  }
+  const results = {
+    success: [],
+    failed: [],
+    skipped: [],
+  };
+  for (const user of users) {
+    const { userid, totalWithdraw } = user;
+    if (!userid || totalWithdraw === undefined) {
+      results.failed.push({
+        userid,
+        reason: "Missing userid or totalWithdraw",
+      });
+      continue;
+    }
+
+    const cleanWithdraw = Math.abs(parseFloat(totalWithdraw));
+
+    try {
+      const existingUser = await User.findOne({ userid: parseInt(userid) });
+      if (!existingUser) {
+        results.skipped.push({ userid, reason: "User not found" });
+        continue;
+      }
+      await User.updateMany(
+        { userid: parseInt(userid) },
+        { $set: { totalwithdraw: cleanWithdraw } }
+      );
+      results.success.push({ userid, totalWithdraw: cleanWithdraw });
+    } catch (error) {
+      console.error(`Import totalWithdraw error for ${userid}:`, error.message);
+      results.failed.push({ userid, reason: error.message });
+    }
+  }
+  res.status(200).json({
+    success: true,
+    message: {
+      en: `Import complete. Success: ${results.success.length}, Skipped: ${results.skipped.length}, Failed: ${results.failed.length}`,
+      zh: `导入完成。成功: ${results.success.length}, 跳过: ${results.skipped.length}, 失败: ${results.failed.length}`,
+    },
+    data: results,
+  });
+});
+
 // 注册游戏
 router.post(
   "/admin/api/register-kiosks-batch",
