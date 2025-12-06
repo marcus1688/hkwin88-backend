@@ -4962,6 +4962,7 @@ router.post(
         processtime: "0s",
         duplicateIP: user.duplicateIP || false,
         duplicateBank: user.duplicateBank || false,
+        newDeposit: user.firstDepositDate === null,
       });
       await newDeposit.save();
       const isFirstDeposit = user.firstDepositDate === null;
