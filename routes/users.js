@@ -5984,5 +5984,161 @@ router.post(
     }
   }
 );
+
+// Adjust Total Deposit
+router.patch(
+  "/admin/api/adjust-total-deposit/:userId",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { amount, remark } = req.body;
+
+      if (!amount || isNaN(amount)) {
+        return res.status(400).json({
+          success: false,
+          message: {
+            en: "Please enter a valid amount",
+            zh: "请输入有效金额",
+          },
+        });
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: {
+            en: "User not found",
+            zh: "用户不存在",
+          },
+        });
+      }
+
+      const currentTotal = Number(user.totaldeposit) || 0;
+      const adjustAmount = Number(amount);
+      const newTotal = currentTotal + adjustAmount;
+
+      await User.findByIdAndUpdate(userId, {
+        totaldeposit: newTotal,
+      });
+
+      await UserWalletLog.create({
+        userId: user._id,
+        transactionid: `ADJ_DEP_${Date.now()}`,
+        transactiontime: new Date(),
+        transactiontype: "adjust deposit",
+        amount: String(adjustAmount),
+        status: "success",
+        game: "-",
+        promotionnameCN:
+          remark || `管理员调整总存款: ${currentTotal} → ${newTotal}`,
+        promotionnameEN:
+          remark ||
+          `Admin adjusted total deposit: ${currentTotal} → ${newTotal}`,
+      });
+
+      res.json({
+        success: true,
+        message: {
+          en: `Total deposit adjusted: ${currentTotal} → ${newTotal}`,
+          zh: `总存款已调整: ${currentTotal} → ${newTotal}`,
+        },
+        data: {
+          previousTotal: currentTotal,
+          adjustAmount: adjustAmount,
+          newTotal: newTotal,
+        },
+      });
+    } catch (error) {
+      console.error("Error adjusting total deposit:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Failed to adjust total deposit",
+          zh: "调整总存款失败",
+        },
+      });
+    }
+  }
+);
+
+// Adjust Total Withdraw
+router.patch(
+  "/admin/api/adjust-total-withdraw/:userId",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { amount, remark } = req.body;
+
+      if (!amount || isNaN(amount)) {
+        return res.status(400).json({
+          success: false,
+          message: {
+            en: "Please enter a valid amount",
+            zh: "请输入有效金额",
+          },
+        });
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: {
+            en: "User not found",
+            zh: "用户不存在",
+          },
+        });
+      }
+
+      const currentTotal = Number(user.totalwithdraw) || 0;
+      const adjustAmount = Number(amount);
+      const newTotal = currentTotal + adjustAmount;
+
+      await User.findByIdAndUpdate(userId, {
+        totalwithdraw: newTotal,
+      });
+
+      await UserWalletLog.create({
+        userId: user._id,
+        transactionid: `ADJ_WD_${Date.now()}`,
+        transactiontime: new Date(),
+        transactiontype: "adjust withdraw",
+        amount: String(adjustAmount),
+        status: "success",
+        game: "-",
+        promotionnameCN:
+          remark || `管理员调整总提款: ${currentTotal} → ${newTotal}`,
+        promotionnameEN:
+          remark ||
+          `Admin adjusted total withdraw: ${currentTotal} → ${newTotal}`,
+      });
+
+      res.json({
+        success: true,
+        message: {
+          en: `Total withdraw adjusted: ${currentTotal} → ${newTotal}`,
+          zh: `总提款已调整: ${currentTotal} → ${newTotal}`,
+        },
+        data: {
+          previousTotal: currentTotal,
+          adjustAmount: adjustAmount,
+          newTotal: newTotal,
+        },
+      });
+    } catch (error) {
+      console.error("Error adjusting total withdraw:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Failed to adjust total withdraw",
+          zh: "调整总提款失败",
+        },
+      });
+    }
+  }
+);
 module.exports = router;
 module.exports.checkAndUpdateVIPLevel = checkAndUpdateVIPLevel;
