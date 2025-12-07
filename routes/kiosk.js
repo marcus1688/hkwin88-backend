@@ -722,6 +722,7 @@ router.post(
             transferOutAPI: kiosk.transferOutAPI,
             balanceAPI: kiosk.balanceAPI,
             databaseGameID: kiosk.databaseGameID,
+            changePasswordApi: kiosk.changePasswordApi || null,
           };
         })
       );
