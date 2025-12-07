@@ -6213,5 +6213,78 @@ router.post(
     }
   }
 );
+
+// Adjust all user firstDepositDate to date now
+router.post(
+  "/update-all-first-deposit-date",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const now = new Date();
+
+      const result = await User.updateMany(
+        { firstDepositDate: null },
+        { $set: { firstDepositDate: now } }
+      );
+
+      res.json({
+        success: true,
+        message: {
+          en: `Updated ${result.modifiedCount} users' firstDepositDate`,
+          zh: `已更新 ${result.modifiedCount} 个用户的首存日期`,
+        },
+        data: {
+          matchedCount: result.matchedCount,
+          modifiedCount: result.modifiedCount,
+          firstDepositDate: now,
+        },
+      });
+    } catch (error) {
+      console.error("Error updating first deposit dates:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Failed to update first deposit dates",
+          zh: "更新首存日期失败",
+        },
+      });
+    }
+  }
+);
+
+// Turn all new deposit to false
+router.post(
+  "/update-all-deposit-new-deposit",
+  // authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const result = await Deposit.updateMany(
+        { newDeposit: true },
+        { $set: { newDeposit: false } }
+      );
+
+      res.json({
+        success: true,
+        message: {
+          en: `Updated ${result.modifiedCount} deposits' newDeposit to false`,
+          zh: `已更新 ${result.modifiedCount} 个存款记录的 newDeposit 为 false`,
+        },
+        data: {
+          matchedCount: result.matchedCount,
+          modifiedCount: result.modifiedCount,
+        },
+      });
+    } catch (error) {
+      console.error("Error updating deposit newDeposit:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Failed to update deposit newDeposit",
+          zh: "更新存款 newDeposit 失败",
+        },
+      });
+    }
+  }
+);
 module.exports = router;
 module.exports.checkAndUpdateVIPLevel = checkAndUpdateVIPLevel;
