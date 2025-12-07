@@ -6255,7 +6255,7 @@ router.post(
 // Turn all new deposit to false
 router.post(
   "/update-all-deposit-new-deposit",
-  // authenticateAdminToken,
+  authenticateAdminToken,
   async (req, res) => {
     try {
       const result = await Deposit.updateMany(
