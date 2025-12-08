@@ -21,30 +21,30 @@ function roundToTwoDecimals(num) {
   return Math.round(num * 100) / 100;
 }
 
-const gameAPIURL = "https://w.apiext88.net";
+const gameAPIURL = "https://smapi.xystem138.com/api/opgateway/v1/op";
 const webURL = "https://www.hkwin88.com/";
-const gameAPPID = "FTXS";
-const gameKEY = process.env.JOKER_SECRET;
+const gameOperatorID = "l22hkwin88HKD";
+const gameKEY = process.env.LIVE22_SECRET;
 const gamePassword = "Qwer1122";
 
-function generateSignature(fields, secretKey) {
-  const data = [];
-  for (const key in fields) {
-    data.push(`${key}=${fields[key]}`);
-  }
-  data.sort();
-
-  const rawData = data.join("&");
-
-  const hmac = crypto.createHmac("sha1", Buffer.from(secretKey, "utf8"));
-  hmac.update(rawData, "utf8");
-
-  return hmac.digest("base64");
+function generateSignature(
+  functionName,
+  requestDateTime,
+  operatorId,
+  secretKey,
+  playerId
+) {
+  const string = `${functionName}${requestDateTime}${operatorId}${secretKey}${playerId}`;
+  return crypto.createHash("md5").update(string).digest("hex");
 }
 
 function generateUniqueTransactionId(prefix) {
   const uuid = uuidv4().replace(/-/g, "");
   return `${prefix}-${uuid.substring(0, 14)}`;
+}
+
+function getUTCDateTime() {
+  return moment.utc().format("YYYY-MM-DDTHH:mm:ss") + "Z";
 }
 
 async function GameWalletLogAttempt(
@@ -255,31 +255,35 @@ async function setJokerPassword(user, rate, password) {
     };
   }
 }
-async function registerJokerUser(user, rate) {
+async function registerLive22User(user, rate) {
   try {
-    const timestamp = moment().unix();
+    const functionName = "CreatePlayer";
 
     const username = rate === "5x" ? `5${user.gameId}` : user.gameId;
 
-    const fields = {
-      Method: "CU",
-      Username: username,
-      Timestamp: timestamp,
+    const requestDateTime = getUTCDateTime();
+
+    const signature = generateSignature(
+      functionName,
+      requestDateTime,
+      gameOperatorID,
+      gameKEY,
+      username
+    );
+
+    const payload = {
+      OperatorId: gameOperatorID,
+      RequestDateTime: requestDateTime,
+      Signature: signature,
+      PlayerId: username,
     };
 
-    const Signature = generateSignature(fields, gameKEY);
-
-    const response = await axios.post(
-      `${gameAPIURL}?appid=${gameAPPID}&signature=${encodeURIComponent(
-        Signature
-      )}`,
-      fields,
-      {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const response = await axios.post(`${gameAPIURL}/CreatePlayer`, payload, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      timeout: 30000,
+    });
 
     if (response.data.Status !== "Created" && response.data.Status !== "OK") {
       return {
@@ -321,7 +325,6 @@ async function registerJokerUser(user, rate) {
     };
   }
 }
-
 router.post(
   "/admin/api/jokerx2/register/:userId",
   authenticateAdminToken,
@@ -1901,5 +1904,5 @@ router.get(
 );
 
 module.exports = router;
-module.exports.registerJokerUser = registerJokerUser;
-module.exports.JokerCheckBalance = JokerCheckBalance;
+// module.exports.registerJokerUser = registerJokerUser;
+// module.exports.JokerCheckBalance = JokerCheckBalance;
