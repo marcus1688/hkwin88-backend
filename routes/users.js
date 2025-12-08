@@ -2292,12 +2292,22 @@ router.post(
           });
         }
       }
-      if (
-        user.firstDepositDate &&
-        moment(deposit.createdAt).isSame(moment(user.firstDepositDate))
-      ) {
+      if (deposit.newDeposit === true) {
         user.firstDepositDate = null;
         deposit.newDeposit = false;
+      }
+
+      if (user.lastdepositdate) {
+        const previousDeposit = await Deposit.findOne({
+          userId: user._id,
+          status: "approved",
+          reverted: { $ne: true },
+          _id: { $ne: deposit._id },
+        }).sort({ createdAt: -1 });
+
+        user.lastdepositdate = previousDeposit
+          ? previousDeposit.createdAt
+          : null;
       }
 
       user.totaldeposit -= deposit.amount;
@@ -2655,12 +2665,16 @@ router.get("/admin/api/allusers", authenticateAdminToken, async (req, res) => {
           $or: [
             { username: new RegExp(search, "i") },
             { fullname: new RegExp(search, "i") },
-            ...(isNaN(search)
-              ? []
-              : [
-                  { phonenumber: parseInt(search) },
-                  { userid: parseInt(search) },
-                ]),
+            {
+              $expr: {
+                $regexMatch: {
+                  input: { $toString: "$phonenumber" },
+                  regex: search,
+                  options: "i",
+                },
+              },
+            },
+            ...(isNaN(search) ? [] : [{ userid: parseInt(search) }]),
           ],
         }
       : {};
@@ -2678,6 +2692,7 @@ router.get("/admin/api/allusers", authenticateAdminToken, async (req, res) => {
       status: "status",
       totalDeposit: "totaldeposit",
       totalWithdraw: "totalwithdraw",
+      totalBonus: "totalbonus",
       winLose: "winlose",
     };
 
@@ -2768,6 +2783,7 @@ router.get("/admin/api/allusers", authenticateAdminToken, async (req, res) => {
           isVerified: 1,
           totaldeposit: 1,
           totalwithdraw: 1,
+          totalbonus: 1,
           winlose: 1,
           wallet: "$walletAmount",
           wallettwo: "$walletTwoAmount",
@@ -2820,6 +2836,7 @@ router.post(
       phoneNumbers = [],
       bankAccounts = [],
       referralCode,
+      freeCreditApply,
     } = req.body;
     if (!fullname || !phoneNumbers.length) {
       return res.status(200).json({
@@ -2832,9 +2849,13 @@ router.post(
     }
     const normalizedUsername = fullname.toLowerCase().replace(/\s+/g, "");
     const normalizedFullname = fullname.toLowerCase().replace(/\s+/g, "");
-    const formattedPhoneNumbers = phoneNumbers.map((phone) =>
-      String(phone).startsWith("852") ? String(phone) : `852${phone}`
-    );
+    const formattedPhoneNumbers = phoneNumbers.map((phone) => {
+      const phoneStr = String(phone);
+      if (phoneStr.length === 8) {
+        return `852${phoneStr}`;
+      }
+      return phoneStr;
+    });
     const primaryPhone = formattedPhoneNumbers[0];
     try {
       const existingUser = await User.findOne({
@@ -2954,6 +2975,83 @@ router.post(
         }
       }
 
+      if (freeCreditApply) {
+        try {
+          const selectedKiosk = await Kiosk.findOne({ name: /joker x2/i });
+          const freeCreditPromotion = await Promotion.findOne({
+            $or: [
+              { maintitleEN: { $regex: /Free Credit/i } },
+              { maintitle: { $regex: /免费积分/ } },
+            ],
+          });
+
+          if (selectedKiosk && freeCreditPromotion) {
+            const bonusAmount = Number(freeCreditPromotion.bonusexact);
+            const transferAmount = bonusAmount / 2; // ✅ Transfer In 是 bonusexact / 2
+
+            // Step 1: Transfer In (bonusexact / 2)
+            const transferUrl = `${API_URL}${selectedKiosk.transferInAPI}/${newUser._id}`;
+            const transferResponse = await fetch(transferUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: req.headers.authorization,
+              },
+              body: JSON.stringify({
+                transferAmount: transferAmount,
+              }),
+            });
+            const transferResult = await transferResponse.json();
+
+            if (transferResult.success) {
+              // Step 2: Create Bonus Record (正常 bonusexact)
+              const transactionId = uuidv4();
+              const adminuser = await adminUser.findById(req.user.userId);
+
+              const newBonus = new Bonus({
+                transactionId,
+                userId: newUser._id,
+                userid: newUser.userid,
+                username: newUser.username,
+                fullname: newUser.fullname,
+                transactionType: "bonus",
+                processBy: adminuser?.username || "system",
+                amount: bonusAmount,
+                walletamount: 0,
+                status: "approved",
+                method: "admin",
+                remark: "Free Credit Apply",
+                game: selectedKiosk.name,
+                promotionname: freeCreditPromotion.maintitle,
+                promotionnameEN: freeCreditPromotion.maintitleEN,
+                promotionId: freeCreditPromotion._id,
+                processtime: "0s",
+              });
+              await newBonus.save();
+
+              await User.findByIdAndUpdate(newUser._id, {
+                $inc: { totalbonus: bonusAmount },
+              });
+
+              const walletLog = new UserWalletLog({
+                userId: newUser._id,
+                transactionid: transactionId,
+                transactiontime: new Date(),
+                transactiontype: "bonus",
+                amount: bonusAmount,
+                status: "approved",
+                remark: "Free Credit Apply",
+                game: selectedKiosk.name,
+                promotionnameCN: freeCreditPromotion.maintitle,
+                promotionnameEN: freeCreditPromotion.maintitleEN,
+              });
+              await walletLog.save();
+            }
+          }
+        } catch (error) {
+          console.error("Free Credit Apply error:", error.message);
+        }
+      }
       res.status(200).json({
         success: true,
         message: {
@@ -4874,6 +4972,7 @@ router.post(
         processtime: "0s",
         duplicateIP: user.duplicateIP || false,
         duplicateBank: user.duplicateBank || false,
+        newDeposit: user.firstDepositDate === null,
       });
       await newDeposit.save();
       const isFirstDeposit = user.firstDepositDate === null;
@@ -5360,5 +5459,832 @@ router.post(
   }
 );
 
+// Import用户数据
+router.post(
+  "/admin/api/import-users",
+  authenticateAdminToken,
+  async (req, res) => {
+    const { users } = req.body;
+    if (!users || !Array.isArray(users) || !users.length) {
+      return res.status(200).json({
+        success: false,
+        message: {
+          en: "No users to import",
+          zh: "没有用户数据",
+        },
+      });
+    }
+    const results = {
+      success: [],
+      failed: [],
+      skipped: [],
+    };
+    const kiosks = await Kiosk.find({
+      isActive: true,
+      registerGameAPI: { $exists: true, $ne: "" },
+    });
+    const API_URL = process.env.API_URL || "http://localhost:3001/api/";
+
+    for (const user of users) {
+      const { id, fullname, phoneNumbers } = user;
+      if (!fullname || !phoneNumbers?.length) {
+        results.failed.push({
+          id,
+          fullname,
+          reason: "Missing fullname or phone",
+        });
+        continue;
+      }
+      const normalizedUsername = fullname.toLowerCase().replace(/\s+/g, "");
+      const normalizedFullname = fullname.toLowerCase().replace(/\s+/g, "");
+      const formattedPhoneNumbers = phoneNumbers.map((phone) => {
+        const phoneStr = String(phone);
+        if (phoneStr.length === 8) {
+          return `852${phoneStr}`;
+        }
+        return phoneStr;
+      });
+      const primaryPhone = formattedPhoneNumbers[0];
+      try {
+        // 只检查 userid 是否重复
+        const newUserId = parseInt(id);
+        const existingUser = await User.findOne({ userid: newUserId });
+        if (existingUser) {
+          results.skipped.push({ id, fullname, reason: "Duplicate userid" });
+          continue;
+        }
+
+        await general.findOneAndUpdate(
+          { userIdCounter: { $lt: newUserId } },
+          { $set: { userIdCounter: newUserId } },
+          { sort: { createdAt: -1 } }
+        );
+        // 生成默认密码
+        const defaultPassword = "123456";
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(defaultPassword, salt);
+        // 生成 referral 相关
+        const newReferralCode = await generateUniqueReferralCode();
+        const referralLink = generateReferralLink(newReferralCode);
+        const referralQrCode = await generateQRWithLogo(referralLink);
+        const newUser = await User.create({
+          userid: newUserId,
+          username: normalizedUsername,
+          fullname: normalizedFullname,
+          password: hashedPassword,
+          phonenumber: primaryPhone,
+          phoneNumbers: formattedPhoneNumbers,
+          registerIp: "csv import",
+          referralLink,
+          referralCode: newReferralCode,
+          referralQrCode,
+          viplevel: null,
+          gameId: await generateUniqueGameId(),
+        });
+
+        // 注册 Kiosk
+        for (const kiosk of kiosks) {
+          try {
+            const url = `${API_URL}${kiosk.registerGameAPI}/${newUser._id}`;
+            const response = await fetch(url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: req.headers.authorization,
+              },
+              body: JSON.stringify({}),
+            });
+            const text = await response.text();
+            try {
+              JSON.parse(text);
+            } catch (parseError) {
+              console.error(`[Import] ${kiosk.name} - Invalid JSON response`);
+            }
+          } catch (error) {
+            console.error(`[Import] ${kiosk.name} error:`, error.message);
+          }
+        }
+
+        results.success.push({ id: newUserId, fullname });
+      } catch (error) {
+        console.error(`Import error for ${fullname}:`, error.message);
+        results.failed.push({ id, fullname, reason: error.message });
+      }
+    }
+    res.status(200).json({
+      success: true,
+      message: {
+        en: `Import complete. Success: ${results.success.length}, Skipped: ${results.skipped.length}, Failed: ${results.failed.length}`,
+        zh: `导入完成。成功: ${results.success.length}, 跳过: ${results.skipped.length}, 失败: ${results.failed.length}`,
+      },
+      data: results,
+    });
+  }
+);
+
+// Import用户totalDeposit数据
+router.post(
+  "/admin/api/import-totaldeposit",
+
+  async (req, res) => {
+    const { users } = req.body;
+    if (!users || !Array.isArray(users) || !users.length) {
+      return res.status(200).json({
+        success: false,
+        message: {
+          en: "No data to import",
+          zh: "没有数据",
+        },
+      });
+    }
+
+    const results = {
+      success: [],
+      failed: [],
+      skipped: [],
+    };
+
+    for (const user of users) {
+      const { userid, totalDeposit } = user;
+
+      if (!userid || totalDeposit === undefined) {
+        results.failed.push({
+          userid,
+          reason: "Missing userid or totalDeposit",
+        });
+        continue;
+      }
+
+      try {
+        const existingUser = await User.findOne({ userid: parseInt(userid) });
+
+        if (!existingUser) {
+          results.skipped.push({ userid, reason: "User not found" });
+          continue;
+        }
+
+        await User.updateMany(
+          { userid: parseInt(userid) },
+          { $set: { totaldeposit: parseFloat(totalDeposit) } }
+        );
+
+        results.success.push({ userid, totalDeposit });
+      } catch (error) {
+        console.error(
+          `Import totalDeposit error for ${userid}:`,
+          error.message
+        );
+        results.failed.push({ userid, reason: error.message });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: {
+        en: `Import complete. Success: ${results.success.length}, Skipped: ${results.skipped.length}, Failed: ${results.failed.length}`,
+        zh: `导入完成。成功: ${results.success.length}, 跳过: ${results.skipped.length}, 失败: ${results.failed.length}`,
+      },
+      data: results,
+    });
+  }
+);
+
+// Import用户totalWithdraw数据
+router.post("/admin/api/import-totalwithdraw", async (req, res) => {
+  const { users } = req.body;
+  if (!users || !Array.isArray(users) || !users.length) {
+    return res.status(200).json({
+      success: false,
+      message: {
+        en: "No data to import",
+        zh: "没有数据",
+      },
+    });
+  }
+  const results = {
+    success: [],
+    failed: [],
+    skipped: [],
+  };
+  for (const user of users) {
+    const { userid, totalWithdraw } = user;
+    if (!userid || totalWithdraw === undefined) {
+      results.failed.push({
+        userid,
+        reason: "Missing userid or totalWithdraw",
+      });
+      continue;
+    }
+
+    const cleanWithdraw = Math.abs(parseFloat(totalWithdraw));
+
+    try {
+      const existingUser = await User.findOne({ userid: parseInt(userid) });
+      if (!existingUser) {
+        results.skipped.push({ userid, reason: "User not found" });
+        continue;
+      }
+      await User.updateMany(
+        { userid: parseInt(userid) },
+        { $set: { totalwithdraw: cleanWithdraw } }
+      );
+      results.success.push({ userid, totalWithdraw: cleanWithdraw });
+    } catch (error) {
+      console.error(`Import totalWithdraw error for ${userid}:`, error.message);
+      results.failed.push({ userid, reason: error.message });
+    }
+  }
+  res.status(200).json({
+    success: true,
+    message: {
+      en: `Import complete. Success: ${results.success.length}, Skipped: ${results.skipped.length}, Failed: ${results.failed.length}`,
+      zh: `导入完成。成功: ${results.success.length}, 跳过: ${results.skipped.length}, 失败: ${results.failed.length}`,
+    },
+    data: results,
+  });
+});
+
+// 注册游戏
+router.post(
+  "/admin/api/register-kiosks-batch",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const kiosks = await Kiosk.find({
+        isActive: true,
+        registerGameAPI: { $exists: true, $ne: "" },
+      });
+      if (!kiosks.length) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "No active kiosks found",
+            zh: "没有找到活跃的 Kiosk",
+          },
+        });
+      }
+
+      const users = await User.find({
+        $or: [
+          { jokerGameName: { $exists: false } },
+          { jokerGameName: null },
+          { jokerGameName: "" },
+        ],
+      });
+
+      console.log(
+        `[Batch Register] 找到 ${users.length} 个没有 jokerGameName 的用户`
+      );
+      console.log(
+        `[Batch Register] 活跃 Kiosks: ${kiosks.map((k) => k.name).join(", ")}`
+      );
+
+      const API_URL = process.env.API_URL || "http://localhost:3001/api/";
+      const results = {
+        success: [],
+        failed: [],
+      };
+
+      // delay function
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      for (const user of users) {
+        console.log(
+          `\n[Batch Register] 处理用户: ${user.userid} - ${user.fullname}`
+        );
+
+        const userResults = {
+          userid: user.userid,
+          fullname: user.fullname,
+          kiosks: [],
+        };
+
+        for (const kiosk of kiosks) {
+          try {
+            const url = `${API_URL}${kiosk.registerGameAPI}/${user._id}`;
+            console.log(`[Batch Register] Calling: ${url}`);
+
+            const response = await fetch(url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: req.headers.authorization,
+              },
+              body: JSON.stringify({}),
+            });
+            const text = await response.text();
+            console.log(`[Batch Register] ${kiosk.name} response:`, text);
+
+            try {
+              const result = JSON.parse(text);
+              userResults.kiosks.push({
+                name: kiosk.name,
+                success: result.success || false,
+                message: result.message || text,
+              });
+            } catch (parseError) {
+              userResults.kiosks.push({
+                name: kiosk.name,
+                success: false,
+                message: "Invalid JSON response",
+              });
+            }
+          } catch (error) {
+            console.log(`[Batch Register] ${kiosk.name} error:`, error.message);
+            userResults.kiosks.push({
+              name: kiosk.name,
+              success: false,
+              message: error.message,
+            });
+          }
+        }
+
+        const allSuccess = userResults.kiosks.every((k) => k.success);
+        if (allSuccess) {
+          results.success.push(userResults);
+        } else {
+          results.failed.push(userResults);
+        }
+
+        // 等 2 秒再处理下一个用户
+        await delay(2000);
+      }
+
+      console.log(
+        `\n[Batch Register] 完成！成功: ${results.success.length}, 失败: ${results.failed.length}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: {
+          en: `Batch registration complete. Success: ${results.success.length}, Failed: ${results.failed.length}`,
+          zh: `批量注册完成。成功: ${results.success.length}, 失败: ${results.failed.length}`,
+        },
+        data: {
+          totalUsers: users.length,
+          totalKiosks: kiosks.length,
+          results,
+        },
+      });
+    } catch (error) {
+      console.error("Batch kiosk registration error:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
+
+// 检查哪个还没注册的
+router.post(
+  "/admin/api/register-kiosks-batch2",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      // 找没有 jokerGameName 或 jokerGameTwoName 的用户
+      const users = await User.find({
+        $or: [
+          { jokerGameName: { $exists: false } },
+          { jokerGameName: null },
+          { jokerGameName: "" },
+          { jokerGameTwoName: { $exists: false } },
+          { jokerGameTwoName: null },
+          { jokerGameTwoName: "" },
+        ],
+      });
+
+      const userIds = users.map((u) => ({
+        id: u._id,
+        userid: u.userid,
+        needJokerX2: !u.jokerGameName,
+        needJokerX5: !u.jokerGameTwoName,
+      }));
+
+      console.log(`[Batch Register] 找到 ${users.length} 个需要注册的用户:`);
+      console.log(JSON.stringify(userIds, null, 2));
+
+      // return res.status(200).json({
+      //   success: true,
+      //   total: users.length,
+      //   users: userIds,
+      // });
+      const API_URL = process.env.API_URL || "http://localhost:3001/";
+      const results = {
+        success: [],
+        failed: [],
+      };
+
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      for (const user of users) {
+        console.log(
+          `\n[Batch Register] 处理用户: ${user.userid} - ${user.fullname}`
+        );
+
+        const userResults = {
+          userid: user.userid,
+          fullname: user.fullname,
+          registered: [],
+        };
+
+        // 检查 jokerGameName
+        if (!user.jokerGameName) {
+          try {
+            const url = `${API_URL}jokerx2/register/${user._id}`;
+            console.log(`[Batch Register] Calling jokerx2: ${url}`);
+
+            const response = await fetch(url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: req.headers.authorization,
+              },
+              body: JSON.stringify({}),
+            });
+            const text = await response.text();
+            console.log(`[Batch Register] jokerx2 response:`, text);
+
+            const result = JSON.parse(text);
+            userResults.registered.push({
+              kiosk: "jokerx2",
+              success: result.success || false,
+              message: result.message || text,
+            });
+          } catch (error) {
+            console.log(`[Batch Register] jokerx2 error:`, error.message);
+            userResults.registered.push({
+              kiosk: "jokerx2",
+              success: false,
+              message: error.message,
+            });
+          }
+
+          await delay(2000);
+        }
+
+        // 检查 jokerGameTwoName
+        if (!user.jokerGameTwoName) {
+          try {
+            const url = `${API_URL}jokerx5/register/${user._id}`;
+            console.log(`[Batch Register] Calling jokerx5: ${url}`);
+
+            const response = await fetch(url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: req.headers.authorization,
+              },
+              body: JSON.stringify({}),
+            });
+            const text = await response.text();
+            console.log(`[Batch Register] jokerx5 response:`, text);
+
+            const result = JSON.parse(text);
+            userResults.registered.push({
+              kiosk: "jokerx5",
+              success: result.success || false,
+              message: result.message || text,
+            });
+          } catch (error) {
+            console.log(`[Batch Register] jokerx5 error:`, error.message);
+            userResults.registered.push({
+              kiosk: "jokerx5",
+              success: false,
+              message: error.message,
+            });
+          }
+
+          await delay(2000);
+        }
+
+        const allSuccess = userResults.registered.every((r) => r.success);
+        if (allSuccess) {
+          results.success.push(userResults);
+        } else {
+          results.failed.push(userResults);
+        }
+      }
+
+      console.log(
+        `\n[Batch Register] 完成！成功: ${results.success.length}, 失败: ${results.failed.length}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: {
+          en: `Batch registration complete. Success: ${results.success.length}, Failed: ${results.failed.length}`,
+          zh: `批量注册完成。成功: ${results.success.length}, 失败: ${results.failed.length}`,
+        },
+        data: {
+          totalUsers: users.length,
+          results,
+        },
+      });
+    } catch (error) {
+      console.error("Batch kiosk registration error:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
+
+// Adjust Total Deposit
+router.patch(
+  "/admin/api/adjust-total-deposit/:userId",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { amount, remark } = req.body;
+
+      if (!amount || isNaN(amount)) {
+        return res.status(400).json({
+          success: false,
+          message: {
+            en: "Please enter a valid amount",
+            zh: "请输入有效金额",
+          },
+        });
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: {
+            en: "User not found",
+            zh: "用户不存在",
+          },
+        });
+      }
+
+      const currentTotal = Number(user.totaldeposit) || 0;
+      const adjustAmount = Number(amount);
+      const newTotal = currentTotal + adjustAmount;
+
+      await User.findByIdAndUpdate(userId, {
+        totaldeposit: newTotal,
+      });
+
+      await UserWalletLog.create({
+        userId: user._id,
+        transactionid: `ADJ_DEP_${Date.now()}`,
+        transactiontime: new Date(),
+        transactiontype: "adjust deposit",
+        amount: String(adjustAmount),
+        status: "success",
+        game: "-",
+        promotionnameCN:
+          remark || `管理员调整总存款: ${currentTotal} → ${newTotal}`,
+        promotionnameEN:
+          remark ||
+          `Admin adjusted total deposit: ${currentTotal} → ${newTotal}`,
+      });
+
+      res.json({
+        success: true,
+        message: {
+          en: `Total deposit adjusted: ${currentTotal} → ${newTotal}`,
+          zh: `总存款已调整: ${currentTotal} → ${newTotal}`,
+        },
+        data: {
+          previousTotal: currentTotal,
+          adjustAmount: adjustAmount,
+          newTotal: newTotal,
+        },
+      });
+    } catch (error) {
+      console.error("Error adjusting total deposit:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Failed to adjust total deposit",
+          zh: "调整总存款失败",
+        },
+      });
+    }
+  }
+);
+
+// Adjust Total Withdraw
+router.patch(
+  "/admin/api/adjust-total-withdraw/:userId",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { amount, remark } = req.body;
+
+      if (!amount || isNaN(amount)) {
+        return res.status(400).json({
+          success: false,
+          message: {
+            en: "Please enter a valid amount",
+            zh: "请输入有效金额",
+          },
+        });
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: {
+            en: "User not found",
+            zh: "用户不存在",
+          },
+        });
+      }
+
+      const currentTotal = Number(user.totalwithdraw) || 0;
+      const adjustAmount = Number(amount);
+      const newTotal = currentTotal + adjustAmount;
+
+      await User.findByIdAndUpdate(userId, {
+        totalwithdraw: newTotal,
+      });
+
+      await UserWalletLog.create({
+        userId: user._id,
+        transactionid: `ADJ_WD_${Date.now()}`,
+        transactiontime: new Date(),
+        transactiontype: "adjust withdraw",
+        amount: String(adjustAmount),
+        status: "success",
+        game: "-",
+        promotionnameCN:
+          remark || `管理员调整总提款: ${currentTotal} → ${newTotal}`,
+        promotionnameEN:
+          remark ||
+          `Admin adjusted total withdraw: ${currentTotal} → ${newTotal}`,
+      });
+
+      res.json({
+        success: true,
+        message: {
+          en: `Total withdraw adjusted: ${currentTotal} → ${newTotal}`,
+          zh: `总提款已调整: ${currentTotal} → ${newTotal}`,
+        },
+        data: {
+          previousTotal: currentTotal,
+          adjustAmount: adjustAmount,
+          newTotal: newTotal,
+        },
+      });
+    } catch (error) {
+      console.error("Error adjusting total withdraw:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Failed to adjust total withdraw",
+          zh: "调整总提款失败",
+        },
+      });
+    }
+  }
+);
+
+// Batch Update All Users VIP Level
+router.post(
+  "/admin/api/update-all-vip-levels",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const users = await User.find({});
+
+      let updatedCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+      const updateResults = [];
+
+      for (const user of users) {
+        const result = await checkAndUpdateVIPLevel(user._id);
+
+        if (result.success) {
+          if (result.message === "VIP level updated") {
+            updatedCount++;
+            updateResults.push({
+              userid: user.userid,
+              username: user.username,
+              oldLevel: result.oldLevel || "None",
+              newLevel: result.newLevel,
+              totalDeposit: user.totaldeposit,
+            });
+          } else {
+            skippedCount++;
+          }
+        } else {
+          errorCount++;
+        }
+      }
+
+      res.json({
+        success: true,
+        message: {
+          en: `VIP levels updated. Updated: ${updatedCount}, Skipped: ${skippedCount}, Errors: ${errorCount}`,
+          zh: `VIP等级已更新。已更新: ${updatedCount}, 已跳过: ${skippedCount}, 错误: ${errorCount}`,
+        },
+        data: {
+          totalUsers: users.length,
+          updatedCount,
+          skippedCount,
+          errorCount,
+          updates: updateResults,
+        },
+      });
+    } catch (error) {
+      console.error("Error updating all VIP levels:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Failed to update VIP levels",
+          zh: "更新VIP等级失败",
+        },
+      });
+    }
+  }
+);
+
+// Adjust all user firstDepositDate to date now
+router.post(
+  "/update-all-first-deposit-date",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const now = new Date();
+
+      const result = await User.updateMany(
+        { firstDepositDate: null },
+        { $set: { firstDepositDate: now } }
+      );
+
+      res.json({
+        success: true,
+        message: {
+          en: `Updated ${result.modifiedCount} users' firstDepositDate`,
+          zh: `已更新 ${result.modifiedCount} 个用户的首存日期`,
+        },
+        data: {
+          matchedCount: result.matchedCount,
+          modifiedCount: result.modifiedCount,
+          firstDepositDate: now,
+        },
+      });
+    } catch (error) {
+      console.error("Error updating first deposit dates:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Failed to update first deposit dates",
+          zh: "更新首存日期失败",
+        },
+      });
+    }
+  }
+);
+
+// Turn all new deposit to false
+router.post(
+  "/update-all-deposit-new-deposit",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const result = await Deposit.updateMany(
+        { newDeposit: true },
+        { $set: { newDeposit: false } }
+      );
+
+      res.json({
+        success: true,
+        message: {
+          en: `Updated ${result.modifiedCount} deposits' newDeposit to false`,
+          zh: `已更新 ${result.modifiedCount} 个存款记录的 newDeposit 为 false`,
+        },
+        data: {
+          matchedCount: result.matchedCount,
+          modifiedCount: result.modifiedCount,
+        },
+      });
+    } catch (error) {
+      console.error("Error updating deposit newDeposit:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Failed to update deposit newDeposit",
+          zh: "更新存款 newDeposit 失败",
+        },
+      });
+    }
+  }
+);
 module.exports = router;
 module.exports.checkAndUpdateVIPLevel = checkAndUpdateVIPLevel;

@@ -196,12 +196,14 @@ const userSchema = new mongoose.Schema(
     referrals: [
       {
         user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        userid: { type: Number },
         username: { type: String },
         _id: false,
       },
     ],
     referralBy: {
       user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      userid: { type: Number },
       username: { type: String },
       _id: false,
     },
