@@ -18,6 +18,7 @@ const Withdraw = require("../models/withdraw.model");
 const { RebateLog } = require("../models/rebate.model");
 const sms = require("../models/sms.model");
 const UserWalletCashOut = require("../models/userwalletcashout.model");
+const UserWalletCashIn = require("../models/userwalletcashin.model");
 const Lock = require("../models/lock.model");
 const jwt = require("jsonwebtoken");
 const { checkForSimilarNames } = require("../utils/nameValidator");
@@ -3658,6 +3659,70 @@ router.patch(
         message: {
           en: "Error processing cashout",
           zh: "处理扣除时出错",
+        },
+      });
+    }
+  }
+);
+
+// Admin CAshin User Wallet
+router.patch(
+  "/admin/api/user/cashin/:userId",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const adminId = req.user.userId;
+      const adminuser = await adminUser.findById(adminId);
+      if (!adminuser) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Admin User not found, please contact customer service",
+            zh: "找不到管理员用户，请联系客服",
+          },
+        });
+      }
+      const { amount, remark, kioskName } = req.body;
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User not found",
+            zh: "找不到用户",
+          },
+        });
+      }
+      const newCashIn = new UserWalletCashIn({
+        transactionId: uuidv4(),
+        userId: user._id,
+        userid: user.userid,
+        username: user.username,
+        fullname: user.fullname,
+        method: "manual",
+        transactionType: "user cashin",
+        processBy: adminuser.username,
+        amount: amount,
+        status: "approved",
+        remark: remark,
+        game: kioskName,
+      });
+      await newCashIn.save();
+      res.status(200).json({
+        success: true,
+        message: {
+          en: "CashIn recorded successfully",
+          zh: "充值记录成功",
+        },
+      });
+    } catch (error) {
+      console.error("Error occurred while processing cashin:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Error processing cashin",
+          zh: "处理充值时出错",
         },
       });
     }

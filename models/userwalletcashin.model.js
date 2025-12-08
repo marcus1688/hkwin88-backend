@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const moment = require("moment");
 
-const userwalletcashoutschema = new mongoose.Schema(
+const userwalletcashinschema = new mongoose.Schema(
   {
     transactionId: {
       type: String,
@@ -59,15 +59,14 @@ const userwalletcashoutschema = new mongoose.Schema(
   },
   {
     timestamps: {
-      currentTime: () => moment().utc().toDate(), // Ensure timestamps are stored in UTC
+      currentTime: () => moment().utc().toDate(),
     },
   }
 );
 
-// 创建模型
-const UserWalletCashOut = mongoose.model(
-  "UserWalletCashOut",
-  userwalletcashoutschema
+const UserWalletCashIn = mongoose.model(
+  "UserWalletCashIn",
+  userwalletcashinschema
 );
 
-module.exports = UserWalletCashOut;
+module.exports = UserWalletCashIn;
