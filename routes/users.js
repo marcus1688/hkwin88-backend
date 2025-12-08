@@ -3967,6 +3967,7 @@ router.get(
         revertedStats,
         newRegistrations,
         userCashoutStats,
+        userCashinStats,
       ] = await Promise.all([
         Deposit.aggregate([
           {
@@ -4191,6 +4192,22 @@ router.get(
             },
           },
         ]),
+        UserWalletCashIn.aggregate([
+          {
+            $match: {
+              status: "approved",
+              reverted: false,
+              ...dateFilter,
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              cashinQty: { $sum: 1 },
+              totalUserCashin: { $sum: "$amount" },
+            },
+          },
+        ]),
       ]);
 
       const reportData = {
@@ -4229,6 +4246,8 @@ router.get(
         totalCashOut: cashStats[0]?.totalCashOut || 0,
         cashoutQty: userCashoutStats[0]?.cashoutQty || 0,
         totalUserCashout: userCashoutStats[0]?.totalUserCashout || 0,
+        cashinQty: userCashinStats[0]?.cashinQty || 0,
+        totalUserCashin: userCashinStats[0]?.totalUserCashin || 0,
         avgDepositTime: depositStats[0]?.depositQty
           ? formatSeconds(
               Math.round(
@@ -4410,6 +4429,20 @@ router.get(
             },
           },
         ]),
+        UserWalletCashIn.aggregate([
+          {
+            $match: {
+              reverted: false,
+              ...dateFilter,
+            },
+          },
+          {
+            $group: {
+              _id: "$username",
+              totalCashin: { $sum: "$amount" },
+            },
+          },
+        ]),
       ]);
 
       // Extract financial data
@@ -4420,6 +4453,7 @@ router.get(
         bonusStats,
         rebateStats,
         cashoutStats,
+        cashinStats,
       ] = financialResults;
 
       // Generic aggregation function for game turnover
@@ -4547,6 +4581,7 @@ router.get(
         ...bonusStats.map((stat) => stat._id),
         ...rebateStats.map((stat) => stat._id),
         ...cashoutStats.map((stat) => stat._id),
+        ...cashinStats.map((stat) => stat._id),
         ...Object.keys(userTurnoverMap),
       ]);
 
@@ -4570,6 +4605,7 @@ router.get(
         const rebate = rebateStats.find((stat) => stat._id === username) || {};
         const cashout =
           cashoutStats.find((stat) => stat._id === username) || {};
+        const cashin = cashinStats.find((stat) => stat._id === username) || {};
         const totalTurnover = userTurnoverMap[username] || 0;
 
         return {
@@ -4583,6 +4619,7 @@ router.get(
           totalBonus: bonus.totalBonus || 0,
           totalRebate: rebate.totalRebate || 0,
           totalCashout: cashout.totalCashout || 0,
+          totalCashin: cashin.totalCashin || 0,
           totalTurnover: Number(totalTurnover.toFixed(2)),
           winLose: (deposit.totalDeposit || 0) - (withdraw.totalWithdraw || 0),
         };

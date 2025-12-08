@@ -5,6 +5,7 @@ const Withdraw = require("../models/withdraw.model");
 const Deposit = require("../models/deposit.model");
 const Bonus = require("../models/bonus.model");
 const UserWalletCashOut = require("../models/userwalletcashout.model");
+const UserWalletCashIn = require("../models/userwalletcashin.model");
 const { authenticateAdminToken } = require("../auth/adminAuth");
 const moment = require("moment");
 
@@ -63,28 +64,35 @@ router.get(
         ...dateFilter,
       };
 
-      const [deposits, withdraws, bonuses, usercashout] = await Promise.all([
-        Deposit.find(queryCondition)
-          .select(
-            "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname game userid _id userId"
-          )
-          .lean(),
-        Withdraw.find(queryCondition)
-          .select(
-            "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname game userid _id userId"
-          )
-          .lean(),
-        Bonus.find(queryCondition)
-          .select(
-            "username fullname promotionnameEN method transactionType amount status remark createdAt processBy processtime _id reverted imageUrl imageUrls duplicateIP duplicateBank game userid _id userId"
-          )
-          .lean(),
-        UserWalletCashOut.find(queryCondition)
-          .select(
-            "username fullname transactionId walletType transactionType amount status remark method processBy reverted revertedProcessBy createdAt _id duplicateIP duplicateBank game userid _id userId"
-          )
-          .lean(),
-      ]);
+      const [deposits, withdraws, bonuses, usercashout, usercashin] =
+        await Promise.all([
+          Deposit.find(queryCondition)
+            .select(
+              "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname game userid _id userId"
+            )
+            .lean(),
+          Withdraw.find(queryCondition)
+            .select(
+              "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname game userid _id userId"
+            )
+            .lean(),
+          Bonus.find(queryCondition)
+            .select(
+              "username fullname promotionnameEN method transactionType amount status remark createdAt processBy processtime _id reverted imageUrl imageUrls duplicateIP duplicateBank game userid _id userId"
+            )
+            .lean(),
+          UserWalletCashOut.find(queryCondition)
+            .select(
+              "username fullname transactionId walletType transactionType amount status remark method processBy reverted revertedProcessBy createdAt _id duplicateIP duplicateBank game userid _id userId"
+            )
+            .lean(),
+          UserWalletCashIn.find(queryCondition)
+            .select(
+              "username fullname transactionId walletType transactionType amount status remark method processBy reverted revertedProcessBy createdAt _id duplicateIP duplicateBank game userid _id userId"
+            )
+            .lean(),
+        ]);
+
       const formatTransaction = (transaction, type) => {
         const commonFields = {
           _id: transaction._id,
@@ -112,7 +120,7 @@ router.get(
             imageUrl: transaction.imageUrl,
             imageUrls: transaction.imageUrls,
           };
-        } else if (type === "walletCashout") {
+        } else if (type === "walletCashout" || type === "walletCashin") {
           return {
             ...commonFields,
             walletType: transaction.walletType,
@@ -129,12 +137,15 @@ router.get(
           };
         }
       };
+
       const formattedTransactions = [
         ...deposits.map((d) => formatTransaction(d, "deposit")),
         ...withdraws.map((w) => formatTransaction(w, "withdraw")),
         ...bonuses.map((b) => formatTransaction(b, "bonus")),
-        ...usercashout.map((b) => formatTransaction(b, "bonus")),
+        ...usercashout.map((c) => formatTransaction(c, "walletCashout")),
+        ...usercashin.map((c) => formatTransaction(c, "walletCashin")),
       ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
       res.status(200).json({
         success: true,
         message: "Filtered transactions fetched successfully",
