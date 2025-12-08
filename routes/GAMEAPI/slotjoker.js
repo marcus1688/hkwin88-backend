@@ -441,7 +441,7 @@ router.post(
   async (req, res) => {
     let formattedDepositAmount = 0;
     try {
-      const { transferAmount } = req.body;
+      const { transferAmount, remark } = req.body;
       formattedDepositAmount = roundToTwoDecimals(transferAmount);
 
       if (isNaN(formattedDepositAmount) || formattedDepositAmount <= 0) {
@@ -521,7 +521,7 @@ router.post(
       await GameWalletLogAttempt(
         user.username,
         "Transfer In",
-        "Transfer",
+        remark || "Transfer",
         roundToTwoDecimals(formattedDepositAmount),
         "JOKER X2",
         roundToTwoDecimals(depositResponse.data.Credit || 0),
@@ -561,7 +561,7 @@ router.post(
   async (req, res) => {
     let formattedWithdrawAmount = 0;
     try {
-      const { transferAmount } = req.body;
+      const { transferAmount, remark } = req.body;
       formattedWithdrawAmount = roundToTwoDecimals(transferAmount);
 
       if (isNaN(formattedWithdrawAmount) || formattedWithdrawAmount <= 0) {
@@ -641,7 +641,7 @@ router.post(
       await GameWalletLogAttempt(
         user.username,
         "Transfer Out",
-        "Transfer",
+        remark || "Transfer",
         roundToTwoDecimals(formattedWithdrawAmount),
         "JOKER X2",
         roundToTwoDecimals(withdrawResponse.data.Credit || 0),
@@ -1145,7 +1145,7 @@ router.post(
   async (req, res) => {
     let formattedDepositAmount = 0;
     try {
-      const { transferAmount } = req.body;
+      const { transferAmount, remark } = req.body;
       formattedDepositAmount = roundToTwoDecimals(transferAmount);
 
       if (isNaN(formattedDepositAmount) || formattedDepositAmount <= 0) {
@@ -1225,7 +1225,7 @@ router.post(
       await GameWalletLogAttempt(
         user.username,
         "Transfer In",
-        "Transfer",
+        remark || "Transfer",
         roundToTwoDecimals(formattedDepositAmount),
         "JOKER X5",
         roundToTwoDecimals(depositResponse.data.Credit || 0),
@@ -1265,7 +1265,7 @@ router.post(
   async (req, res) => {
     let formattedWithdrawAmount = 0;
     try {
-      const { transferAmount } = req.body;
+      const { transferAmount, remark } = req.body;
       formattedWithdrawAmount = roundToTwoDecimals(transferAmount);
 
       if (isNaN(formattedWithdrawAmount) || formattedWithdrawAmount <= 0) {
@@ -1345,7 +1345,7 @@ router.post(
       await GameWalletLogAttempt(
         user.username,
         "Transfer Out",
-        "Transfer",
+        remark || "Transfer",
         roundToTwoDecimals(formattedWithdrawAmount),
         "JOKER X5",
         roundToTwoDecimals(withdrawResponse.data.Credit || 0),
