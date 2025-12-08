@@ -577,13 +577,13 @@ router.get(
           $match: {
             status: "approved",
             reverted: false,
-            withdrawbankid: { $in: banks.map((b) => b._id.toString()) },
+            bankid: { $in: banks.map((b) => b._id.toString()) },
             ...dateFilter,
           },
         },
         {
           $group: {
-            _id: "$withdrawbankid",
+            _id: "$bankid",
             totalWithdrawals: { $sum: "$amount" },
           },
         },
