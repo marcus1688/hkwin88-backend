@@ -395,9 +395,8 @@ router.patch(
 
 // Admin Cash In
 router.post("/admin/api/cashin", authenticateAdminToken, async (req, res) => {
-  const { id, amount, remark } = req.body;
+  const { id, amount, remark, transactionDate } = req.body;
   const cashInAmount = parseFloat(amount);
-
   try {
     const adminId = req.user.userId;
     const adminuser = await adminUser.findById(adminId);
@@ -421,10 +420,13 @@ router.post("/admin/api/cashin", authenticateAdminToken, async (req, res) => {
       });
     }
     const oldBalance = bank.currentbalance;
-
     bank.totalCashIn += cashInAmount;
     bank.currentbalance += cashInAmount;
     await bank.save();
+
+    const customDate = transactionDate
+      ? moment(transactionDate).utc().toDate()
+      : moment().utc().toDate();
 
     const transactionLog = new BankTransactionLog({
       bankName: bank.bankname,
@@ -439,8 +441,11 @@ router.post("/admin/api/cashin", authenticateAdminToken, async (req, res) => {
       qrimage: bank.qrimage,
       playerusername: "n/a",
       playerfullname: "n/a",
+      createdAt: customDate,
+      updatedAt: customDate,
     });
     await transactionLog.save();
+
     res.status(200).json({
       success: true,
       message: {
@@ -463,9 +468,8 @@ router.post("/admin/api/cashin", authenticateAdminToken, async (req, res) => {
 
 // Admin Cash Out
 router.post("/admin/api/cashout", authenticateAdminToken, async (req, res) => {
-  const { id, amount, remark } = req.body;
+  const { id, amount, remark, transactionDate } = req.body;
   const cashOutAmount = parseFloat(amount);
-
   try {
     const adminId = req.user.userId;
     const adminuser = await adminUser.findById(adminId);
@@ -498,11 +502,14 @@ router.post("/admin/api/cashout", authenticateAdminToken, async (req, res) => {
       });
     }
     const oldBalance = bank.currentbalance;
-
     bank.totalCashOut += cashOutAmount;
     bank.currentbalance -= cashOutAmount;
     await bank.save();
 
+    const customDate = transactionDate
+      ? moment(transactionDate).utc().toDate()
+      : moment().utc().toDate();
+    console.log(customDate);
     const transactionLog = new BankTransactionLog({
       bankName: bank.bankname,
       ownername: bank.ownername,
@@ -516,6 +523,8 @@ router.post("/admin/api/cashout", authenticateAdminToken, async (req, res) => {
       qrimage: bank.qrimage,
       playerusername: "n/a",
       playerfullname: "n/a",
+      createdAt: customDate,
+      updatedAt: customDate,
     });
     await transactionLog.save();
 

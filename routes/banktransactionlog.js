@@ -10,6 +10,40 @@ const { authenticateAdminToken } = require("../auth/adminAuth");
 const moment = require("moment");
 
 // Admin Get Bank Transaction Log
+// router.get(
+//   "/admin/api/banktransactionlog",
+//   authenticateAdminToken,
+//   async (req, res) => {
+//     try {
+//       const { startDate, endDate } = req.query;
+//       const dateFilter = {};
+//       if (startDate && endDate) {
+//         dateFilter.createdAt = {
+//           $gte: moment(new Date(startDate)).utc().toDate(),
+//           $lte: moment(new Date(endDate)).utc().toDate(),
+//         };
+//       }
+//       const banktransactionlog = await BankTransactionLog.find({
+//         ...dateFilter,
+//       }).sort({
+//         createdAt: -1,
+//       });
+//       res.status(200).json({
+//         success: true,
+//         message: "Bank transaction log retrieved successfully",
+//         data: banktransactionlog,
+//       });
+//     } catch (error) {
+//       console.error(
+//         "Error occurred while retrieving bank transaction log:",
+//         error
+//       );
+//       res
+//         .status(200)
+//         .json({ message: "Internal server error", error: error.message });
+//     }
+//   }
+// );
 router.get(
   "/admin/api/banktransactionlog",
   authenticateAdminToken,
@@ -17,17 +51,33 @@ router.get(
     try {
       const { startDate, endDate } = req.query;
       const dateFilter = {};
+
+      console.log("=== Date Filter Debug ===");
+      console.log("Raw startDate:", startDate);
+      console.log("Raw endDate:", endDate);
+
       if (startDate && endDate) {
+        const start = moment(new Date(startDate)).utc().toDate();
+        const end = moment(new Date(endDate)).utc().toDate();
+
+        console.log("Parsed start:", start);
+        console.log("Parsed end:", end);
+
         dateFilter.createdAt = {
-          $gte: moment(new Date(startDate)).utc().toDate(),
-          $lte: moment(new Date(endDate)).utc().toDate(),
+          $gte: start,
+          $lte: end,
         };
       }
+
       const banktransactionlog = await BankTransactionLog.find({
         ...dateFilter,
       }).sort({
         createdAt: -1,
       });
+
+      console.log("Total records found:", banktransactionlog.length);
+      console.log("=========================");
+
       res.status(200).json({
         success: true,
         message: "Bank transaction log retrieved successfully",
