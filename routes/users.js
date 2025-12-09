@@ -2250,6 +2250,7 @@ router.post(
           },
         });
       }
+
       const deposit = await Deposit.findById(depositId);
       if (!deposit) {
         return res.status(200).json({
@@ -2260,6 +2261,7 @@ router.post(
           },
         });
       }
+
       if (deposit.status !== "approved" || deposit.reverted) {
         return res.status(200).json({
           success: false,
@@ -2269,6 +2271,7 @@ router.post(
           },
         });
       }
+
       const user = await User.findOne({ username: deposit.username });
       if (!user) {
         return res.status(200).json({
@@ -2280,8 +2283,10 @@ router.post(
         });
       }
 
+      const isFromWallet = deposit.bankname === "User Wallet";
+
       let bank = null;
-      if (deposit.method !== "auto") {
+      if (!isFromWallet && deposit.method !== "auto") {
         bank = await BankList.findById(deposit.bankid);
         if (!bank) {
           return res.status(200).json({
@@ -2293,6 +2298,7 @@ router.post(
           });
         }
       }
+
       if (deposit.newDeposit === true) {
         user.firstDepositDate = null;
         deposit.newDeposit = false;
@@ -2312,10 +2318,15 @@ router.post(
       }
 
       user.totaldeposit -= deposit.amount;
+
+      if (isFromWallet) {
+        user.wallet = Number(user.wallet) + Number(deposit.amount);
+      }
+
       await user.save();
       await checkAndUpdateVIPLevel(user._id);
 
-      if (deposit.method !== "auto" && bank) {
+      if (!isFromWallet && deposit.method !== "auto" && bank) {
         bank.currentbalance -= deposit.amount;
         bank.totalDeposits -= deposit.amount;
         await bank.save();
@@ -2337,7 +2348,7 @@ router.post(
       adminuser.totalRevertedDeposits += 1;
       await adminuser.save();
 
-      if (deposit.method !== "auto" && bank) {
+      if (!isFromWallet && deposit.method !== "auto" && bank) {
         const transactionLog = new BankTransactionLog({
           bankName: bank.bankname,
           ownername: bank.ownername,
@@ -2395,6 +2406,7 @@ router.post(
           },
         });
       }
+
       const withdraw = await Withdraw.findById(withdrawId);
       if (!withdraw) {
         return res.status(200).json({
@@ -2405,6 +2417,7 @@ router.post(
           },
         });
       }
+
       if (withdraw.status !== "approved" || withdraw.reverted) {
         return res.status(200).json({
           success: false,
@@ -2414,6 +2427,7 @@ router.post(
           },
         });
       }
+
       const user = await User.findOne({ username: withdraw.username });
       if (!user) {
         return res.status(200).json({
@@ -2424,22 +2438,72 @@ router.post(
           },
         });
       }
-      const bank = await BankList.findById(withdraw.bankid);
-      if (!bank) {
-        return res.status(200).json({
-          success: false,
-          message: {
-            en: "Bank account not found",
-            zh: "找不到银行账户",
+
+      const kioskAmount = Number(withdraw.amount) || 0;
+      const bankAmount = Number(withdraw.bankAmount) || kioskAmount;
+      const walletAmount = bankAmount - kioskAmount;
+
+      const isToWallet = withdraw.bankname === "User Wallet";
+
+      if (isToWallet) {
+        await User.findByIdAndUpdate(user._id, {
+          $inc: {
+            totalwithdraw: -kioskAmount,
+            wallet: -kioskAmount,
           },
         });
-      }
-      user.totalwithdraw -= withdraw.amount;
-      await user.save();
+      } else {
+        const bank = await BankList.findById(withdraw.bankid);
+        if (!bank) {
+          return res.status(200).json({
+            success: false,
+            message: {
+              en: "Bank account not found",
+              zh: "找不到银行账户",
+            },
+          });
+        }
 
-      bank.currentbalance += withdraw.amount;
-      bank.totalWithdrawals -= withdraw.amount;
-      await bank.save();
+        const userUpdate = {
+          $inc: {
+            totalwithdraw: -kioskAmount,
+          },
+        };
+        if (walletAmount > 0) {
+          userUpdate.$inc.wallet = walletAmount;
+        }
+        await User.findByIdAndUpdate(user._id, userUpdate);
+
+        await BankList.findByIdAndUpdate(bank._id, {
+          $inc: {
+            currentbalance: bankAmount,
+            totalWithdrawals: -bankAmount,
+          },
+        });
+
+        const updatedBank = await BankList.findById(bank._id);
+        const transactionLog = new BankTransactionLog({
+          bankName: bank.bankname,
+          ownername: bank.ownername,
+          bankAccount: bank.bankaccount,
+          remark:
+            walletAmount > 0
+              ? `${
+                  withdraw.remark || "-"
+                } | Reverted (Kiosk: ${kioskAmount}, Wallet: ${walletAmount})`
+              : withdraw.remark || "-",
+          lastBalance: updatedBank.currentbalance - bankAmount,
+          currentBalance: updatedBank.currentbalance,
+          processby: adminuser.username,
+          transactiontype: "reverted withdraw",
+          amount: bankAmount,
+          qrimage: bank.qrimage,
+          userid: user.userid,
+          playerusername: user.username,
+          playerfullname: user.fullname,
+        });
+        await transactionLog.save();
+      }
 
       withdraw.reverted = true;
       withdraw.status = "reverted";
@@ -2456,23 +2520,6 @@ router.post(
 
       adminuser.totalRevertedWithdrawals += 1;
       await adminuser.save();
-
-      const transactionLog = new BankTransactionLog({
-        bankName: bank.bankname,
-        ownername: bank.ownername,
-        bankAccount: bank.bankaccount,
-        remark: withdraw.remark || "-",
-        lastBalance: bank.currentbalance - withdraw.amount,
-        currentBalance: bank.currentbalance,
-        processby: adminuser.username,
-        transactiontype: "reverted withdraw",
-        amount: withdraw.amount,
-        qrimage: bank.qrimage,
-        userid: user.userid,
-        playerusername: user.username,
-        playerfullname: user.fullname,
-      });
-      await transactionLog.save();
 
       res.status(200).json({
         success: true,
