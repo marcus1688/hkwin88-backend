@@ -5011,8 +5011,18 @@ router.post(
           },
         });
       }
-      const { userId, username, amount, kioskId, kioskName, bankId, remark } =
-        req.body;
+
+      const {
+        userId,
+        username,
+        amount,
+        kioskId,
+        kioskName,
+        bankId,
+        fromWallet,
+        remark,
+      } = req.body;
+
       if (!userId || !username || !amount || amount <= 0) {
         return res.status(200).json({
           success: false,
@@ -5022,7 +5032,8 @@ router.post(
           },
         });
       }
-      if (!bankId) {
+
+      if (!fromWallet && !bankId) {
         return res.status(200).json({
           success: false,
           message: {
@@ -5031,6 +5042,7 @@ router.post(
           },
         });
       }
+
       const user = await User.findById(userId);
       if (!user) {
         return res.status(200).json({
@@ -5041,16 +5053,33 @@ router.post(
           },
         });
       }
-      const bank = await BankList.findById(bankId);
-      if (!bank) {
-        return res.status(200).json({
-          success: false,
-          message: {
-            en: "Bank not found",
-            zh: "找不到银行",
-          },
-        });
+
+      if (fromWallet) {
+        if (Number(user.wallet) < Number(amount)) {
+          return res.status(200).json({
+            success: false,
+            message: {
+              en: `Insufficient wallet balance. Current: ${user.wallet}, Required: ${amount}`,
+              zh: `钱包余额不足。当前: ${user.wallet}，需要: ${amount}`,
+            },
+          });
+        }
       }
+
+      let bank = null;
+      if (!fromWallet) {
+        bank = await BankList.findById(bankId);
+        if (!bank) {
+          return res.status(200).json({
+            success: false,
+            message: {
+              en: "Bank not found",
+              zh: "找不到银行",
+            },
+          });
+        }
+      }
+
       const transactionId = uuidv4();
       const newDeposit = new Deposit({
         transactionId,
@@ -5058,10 +5087,10 @@ router.post(
         userid: user.userid,
         username: user.username,
         fullname: user.fullname,
-        bankid: bank._id,
-        bankname: bank.bankname,
-        ownername: bank.ownername,
-        transfernumber: bank.bankaccount,
+        bankid: fromWallet ? null : bank._id,
+        bankname: fromWallet ? "User Wallet" : bank.bankname,
+        ownername: fromWallet ? user.fullname : bank.ownername,
+        transfernumber: fromWallet ? "-" : bank.bankaccount,
         walletType: "Main",
         transactionType: "deposit",
         processBy: adminuser.username,
@@ -5069,7 +5098,7 @@ router.post(
         walletamount: user.wallet,
         method: "admin",
         status: "approved",
-        remark: remark,
+        remark: fromWallet ? `${remark || "-"} | From Wallet` : remark,
         game: kioskName,
         processtime: "0s",
         duplicateIP: user.duplicateIP || false,
@@ -5077,8 +5106,9 @@ router.post(
         newDeposit: user.firstDepositDate === null,
       });
       await newDeposit.save();
+
       const isFirstDeposit = user.firstDepositDate === null;
-      const updateFields = {
+      const userUpdate = {
         $inc: {
           totaldeposit: Number(amount),
         },
@@ -5087,66 +5117,81 @@ router.post(
           ...(isFirstDeposit && { firstDepositDate: new Date() }),
         },
       };
-      await User.findByIdAndUpdate(user._id, updateFields);
+
+      if (fromWallet) {
+        userUpdate.$inc.wallet = -Number(amount);
+      }
+
+      await User.findByIdAndUpdate(user._id, userUpdate);
       await checkAndUpdateVIPLevel(user._id);
-      await BankList.findByIdAndUpdate(
-        bankId,
-        [
-          {
-            $set: {
-              totalDeposits: { $add: ["$totalDeposits", Number(amount)] },
-              currentbalance: {
-                $subtract: [
-                  {
-                    $add: [
-                      "$startingbalance",
-                      { $add: ["$totalDeposits", Number(amount)] },
-                      "$totalCashIn",
-                    ],
-                  },
-                  {
-                    $add: ["$totalWithdrawals", "$totalCashOut"],
-                  },
-                ],
+
+      if (!fromWallet) {
+        await BankList.findByIdAndUpdate(
+          bankId,
+          [
+            {
+              $set: {
+                totalDeposits: { $add: ["$totalDeposits", Number(amount)] },
+                currentbalance: {
+                  $subtract: [
+                    {
+                      $add: [
+                        "$startingbalance",
+                        { $add: ["$totalDeposits", Number(amount)] },
+                        "$totalCashIn",
+                      ],
+                    },
+                    {
+                      $add: ["$totalWithdrawals", "$totalCashOut"],
+                    },
+                  ],
+                },
               },
             },
-          },
-        ],
-        { new: true }
-      );
-      const updatedBank = await BankList.findById(bankId);
-      const bankLog = new BankTransactionLog({
-        bankName: bank.bankname,
-        ownername: bank.ownername,
-        bankAccount: bank.bankaccount,
-        remark: remark,
-        lastBalance: updatedBank.currentbalance - Number(amount),
-        currentBalance: updatedBank.currentbalance,
-        processby: adminuser.username,
-        qrimage: bank.qrimage,
-        userid: user.userid,
-        playerusername: user.username,
-        playerfullname: user.fullname,
-        transactiontype: "deposit",
-        amount: Number(amount),
-      });
-      await bankLog.save();
+          ],
+          { new: true }
+        );
+
+        const updatedBank = await BankList.findById(bankId);
+        const bankLog = new BankTransactionLog({
+          bankName: bank.bankname,
+          ownername: bank.ownername,
+          bankAccount: bank.bankaccount,
+          remark: remark,
+          lastBalance: updatedBank.currentbalance - Number(amount),
+          currentBalance: updatedBank.currentbalance,
+          processby: adminuser.username,
+          qrimage: bank.qrimage,
+          userid: user.userid,
+          playerusername: user.username,
+          playerfullname: user.fullname,
+          transactiontype: "deposit",
+          amount: Number(amount),
+        });
+        await bankLog.save();
+      }
+
       const walletLog = new UserWalletLog({
         userId: user._id,
         transactionid: transactionId,
         transactiontime: new Date(),
-        transactiontype: "deposit",
+        transactiontype: fromWallet ? "Deposit from Wallet" : "deposit",
         amount: Number(amount),
         status: "approved",
-        remark: remark,
+        remark: fromWallet ? `From Wallet` : remark,
         game: kioskName,
       });
       await walletLog.save();
+
       res.status(200).json({
         success: true,
         message: {
-          en: `Deposit of ${amount} approved for ${username}`,
-          zh: `已为 ${username} 批准 ${amount} 存款`,
+          en: fromWallet
+            ? `Deposit of ${amount} from wallet approved for ${username}`
+            : `Deposit of ${amount} approved for ${username}`,
+          zh: fromWallet
+            ? `已为 ${username} 批准从钱包存款 ${amount}`
+            : `已为 ${username} 批准 ${amount} 存款`,
         },
         data: {
           depositId: newDeposit._id,
