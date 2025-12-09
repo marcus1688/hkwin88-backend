@@ -20,7 +20,6 @@ const withdrawSchema = new mongoose.Schema(
     },
     bankid: {
       type: String,
-      required: true,
     },
     bankname: {
       type: String,
@@ -51,6 +50,10 @@ const withdrawSchema = new mongoose.Schema(
     amount: {
       type: Number,
       required: true,
+    },
+    bankAmount: {
+      type: Number,
+      default: null,
     },
     walletamount: {
       type: Number,

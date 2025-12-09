@@ -5183,9 +5183,24 @@ router.post(
           },
         });
       }
-      const { userId, username, amount, kioskId, kioskName, bankId, remark } =
-        req.body;
-      if (!userId || !username || !amount || amount <= 0) {
+
+      const {
+        userId,
+        username,
+        amount,
+        walletAmount,
+        kioskId,
+        kioskName,
+        bankId,
+        toWallet,
+        remark,
+      } = req.body;
+
+      const kioskWithdrawAmount = Number(amount) || 0;
+      const walletWithdrawAmount = Number(walletAmount) || 0;
+      const totalBankAmount = kioskWithdrawAmount + walletWithdrawAmount;
+
+      if (!userId || !username || totalBankAmount <= 0) {
         return res.status(200).json({
           success: false,
           message: {
@@ -5194,7 +5209,8 @@ router.post(
           },
         });
       }
-      if (!bankId) {
+
+      if (!toWallet && !bankId) {
         return res.status(200).json({
           success: false,
           message: {
@@ -5203,6 +5219,7 @@ router.post(
           },
         });
       }
+
       const user = await User.findById(userId);
       if (!user) {
         return res.status(200).json({
@@ -5213,132 +5230,231 @@ router.post(
           },
         });
       }
-      const bank = await BankList.findById(bankId);
-      if (!bank) {
-        return res.status(200).json({
-          success: false,
-          message: {
-            en: "Bank not found",
-            zh: "找不到银行",
-          },
-        });
+
+      let bank = null;
+      if (!toWallet) {
+        bank = await BankList.findById(bankId);
+        if (!bank) {
+          return res.status(200).json({
+            success: false,
+            message: {
+              en: "Bank not found",
+              zh: "找不到银行",
+            },
+          });
+        }
       }
 
-      if (bank.currentbalance < Number(amount)) {
-        return res.status(200).json({
-          success: false,
-          message: {
-            en: `Insufficient bank balance. Current balance: ${bank.currentbalance}, Withdraw amount: ${amount}`,
-            zh: `银行余额不足。当前余额: ${bank.currentbalance}，提款金额: ${amount}`,
-          },
-        });
+      if (walletWithdrawAmount > 0) {
+        if (Number(user.wallet) < walletWithdrawAmount) {
+          return res.status(200).json({
+            success: false,
+            message: {
+              en: `Insufficient wallet balance. Current: ${user.wallet}, Required: ${walletWithdrawAmount}`,
+              zh: `钱包余额不足。当前: ${user.wallet}，需要: ${walletWithdrawAmount}`,
+            },
+          });
+        }
+      }
+
+      if (!toWallet && bank) {
+        if (bank.currentbalance < totalBankAmount) {
+          return res.status(200).json({
+            success: false,
+            message: {
+              en: `Insufficient bank balance. Current: ${bank.currentbalance}, Required: ${totalBankAmount}`,
+              zh: `银行余额不足。当前: ${bank.currentbalance}，需要: ${totalBankAmount}`,
+            },
+          });
+        }
       }
 
       const transactionId = uuidv4();
-      const newWithdraw = new Withdraw({
-        transactionId,
-        userId: user._id,
-        userid: user.userid,
-        username: user.username,
-        fullname: user.fullname,
-        bankid: bank._id,
-        bankname: bank.bankname,
-        ownername: bank.ownername,
-        transfernumber: bank.bankaccount,
-        walletType: "Main",
-        transactionType: "withdraw",
-        processBy: adminuser.username,
-        amount: Number(amount),
-        walletamount: user.wallet,
-        method: "admin",
-        status: "approved",
-        remark: remark,
-        game: kioskName,
-        processtime: "0s",
-        duplicateIP: user.duplicateIP || false,
-        duplicateBank: user.duplicateBank || false,
-      });
-      await newWithdraw.save();
 
-      await User.findByIdAndUpdate(user._id, {
-        $inc: {
-          totalwithdraw: Number(amount),
-        },
-        $set: {
-          lastwithdrawdate: new Date(),
-        },
-      });
+      if (toWallet) {
+        const newWithdraw = new Withdraw({
+          transactionId,
+          userId: user._id,
+          userid: user.userid,
+          username: user.username,
+          fullname: user.fullname,
+          bankid: null,
+          bankname: "User Wallet",
+          ownername: user.fullname,
+          transfernumber: "-",
+          walletType: "Main",
+          transactionType: "withdraw",
+          processBy: adminuser.username,
+          amount: Number(amount),
+          walletamount: user.wallet,
+          method: "admin",
+          status: "approved",
+          remark: remark || "Withdraw to wallet",
+          game: kioskName,
+          processtime: "0s",
+          duplicateIP: user.duplicateIP || false,
+          duplicateBank: user.duplicateBank || false,
+        });
+        await newWithdraw.save();
 
-      await BankList.findByIdAndUpdate(
-        bankId,
-        [
-          {
-            $set: {
-              totalWithdrawals: { $add: ["$totalWithdrawals", Number(amount)] },
-              currentbalance: {
-                $subtract: [
-                  {
-                    $add: [
-                      "$startingbalance",
-                      "$totalDeposits",
-                      "$totalCashIn",
-                    ],
-                  },
-                  {
-                    $add: [
-                      { $add: ["$totalWithdrawals", Number(amount)] },
-                      "$totalCashOut",
-                    ],
-                  },
-                ],
+        await User.findByIdAndUpdate(user._id, {
+          $inc: {
+            totalwithdraw: Number(amount),
+            wallet: Number(amount),
+          },
+        });
+
+        const walletLog = new UserWalletLog({
+          userId: user._id,
+          transactionid: transactionId,
+          transactiontime: new Date(),
+          transactiontype: "Withdraw to Wallet",
+          amount: Number(amount),
+          status: "approved",
+          remark: remark || "Withdraw to Wallet",
+          game: kioskName,
+        });
+        await walletLog.save();
+
+        res.status(200).json({
+          success: true,
+          message: {
+            en: `Withdraw of ${amount} approved for ${username} (to wallet)`,
+            zh: `已为 ${username} 批准 ${amount} 提款（到钱包）`,
+          },
+          data: {
+            withdrawId: newWithdraw._id,
+            transactionId,
+          },
+        });
+      } else {
+        const newWithdraw = new Withdraw({
+          transactionId,
+          userId: user._id,
+          userid: user.userid,
+          username: user.username,
+          fullname: user.fullname,
+          bankid: bank._id,
+          bankname: bank.bankname,
+          ownername: bank.ownername,
+          transfernumber: bank.bankaccount,
+          walletType: "Main",
+          transactionType: "withdraw",
+          processBy: adminuser.username,
+          amount: kioskWithdrawAmount,
+          bankAmount: totalBankAmount,
+          walletamount: user.wallet,
+          method: "admin",
+          status: "approved",
+          remark:
+            walletWithdrawAmount > 0
+              ? `${remark || "-"} | Include wallet: ${walletWithdrawAmount}`
+              : remark,
+          game: kioskName,
+          processtime: "0s",
+          duplicateIP: user.duplicateIP || false,
+          duplicateBank: user.duplicateBank || false,
+        });
+        await newWithdraw.save();
+
+        const userUpdate = {
+          $inc: {
+            totalwithdraw: kioskWithdrawAmount,
+          },
+        };
+        if (walletWithdrawAmount > 0) {
+          userUpdate.$inc.wallet = -walletWithdrawAmount;
+        }
+        await User.findByIdAndUpdate(user._id, userUpdate);
+
+        await BankList.findByIdAndUpdate(
+          bankId,
+          [
+            {
+              $set: {
+                totalWithdrawals: {
+                  $add: ["$totalWithdrawals", totalBankAmount],
+                },
+                currentbalance: {
+                  $subtract: [
+                    {
+                      $add: [
+                        "$startingbalance",
+                        "$totalDeposits",
+                        "$totalCashIn",
+                      ],
+                    },
+                    {
+                      $add: [
+                        { $add: ["$totalWithdrawals", totalBankAmount] },
+                        "$totalCashOut",
+                      ],
+                    },
+                  ],
+                },
               },
             },
+          ],
+          { new: true }
+        );
+
+        const updatedBank = await BankList.findById(bankId);
+
+        const bankLog = new BankTransactionLog({
+          bankName: bank.bankname,
+          ownername: bank.ownername,
+          bankAccount: bank.bankaccount,
+          remark:
+            walletWithdrawAmount > 0
+              ? `${
+                  remark || "-"
+                } | Kiosk: ${kioskWithdrawAmount}, Wallet: ${walletWithdrawAmount}`
+              : remark,
+          lastBalance: updatedBank.currentbalance + totalBankAmount,
+          currentBalance: updatedBank.currentbalance,
+          processby: adminuser.username,
+          qrimage: bank.qrimage,
+          userid: user.userid,
+          playerusername: user.username,
+          playerfullname: user.fullname,
+          transactiontype: "withdraw",
+          amount: totalBankAmount,
+        });
+        await bankLog.save();
+
+        const walletLog = new UserWalletLog({
+          userId: user._id,
+          transactionid: transactionId,
+          transactiontime: new Date(),
+          transactiontype: "withdraw",
+          amount: kioskWithdrawAmount,
+          status: "approved",
+          remark:
+            walletWithdrawAmount > 0
+              ? `Kiosk: ${kioskWithdrawAmount}, Wallet: ${walletWithdrawAmount}, Bank Total: ${totalBankAmount}`
+              : remark,
+          game: kioskName,
+        });
+        await walletLog.save();
+
+        res.status(200).json({
+          success: true,
+          message: {
+            en:
+              walletWithdrawAmount > 0
+                ? `Withdraw processed for ${username} (Kiosk: ${kioskWithdrawAmount}, Wallet: ${walletWithdrawAmount}, Total: ${totalBankAmount})`
+                : `Withdraw of ${kioskWithdrawAmount} approved for ${username}`,
+            zh:
+              walletWithdrawAmount > 0
+                ? `已为 ${username} 处理提款（Kiosk: ${kioskWithdrawAmount}, 钱包: ${walletWithdrawAmount}, 总计: ${totalBankAmount}）`
+                : `已为 ${username} 批准 ${kioskWithdrawAmount} 提款`,
           },
-        ],
-        { new: true }
-      );
-
-      const updatedBank = await BankList.findById(bankId);
-      const bankLog = new BankTransactionLog({
-        bankName: bank.bankname,
-        ownername: bank.ownername,
-        bankAccount: bank.bankaccount,
-        remark: remark,
-        lastBalance: updatedBank.currentbalance + Number(amount),
-        currentBalance: updatedBank.currentbalance,
-        processby: adminuser.username,
-        qrimage: bank.qrimage,
-        userid: user.userid,
-        playerusername: user.username,
-        playerfullname: user.fullname,
-        transactiontype: "withdraw",
-        amount: Number(amount),
-      });
-      await bankLog.save();
-
-      const walletLog = new UserWalletLog({
-        userId: user._id,
-        transactionid: transactionId,
-        transactiontime: new Date(),
-        transactiontype: "withdraw",
-        amount: Number(amount),
-        status: "approved",
-        remark: remark,
-        game: kioskName,
-      });
-      await walletLog.save();
-
-      res.status(200).json({
-        success: true,
-        message: {
-          en: `Withdraw of ${amount} approved for ${username}`,
-          zh: `已为 ${username} 批准 ${amount} 提款`,
-        },
-        data: {
-          withdrawId: newWithdraw._id,
-          transactionId,
-        },
-      });
+          data: {
+            withdrawId: newWithdraw._id,
+            transactionId,
+          },
+        });
+      }
     } catch (error) {
       console.error("Error in admin direct withdraw:", error);
       res.status(500).json({
