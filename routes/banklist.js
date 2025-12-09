@@ -323,7 +323,6 @@ router.patch(
   "/admin/api/updatestartingbalance",
   authenticateAdminToken,
   async (req, res) => {
-    console.log(req.body);
     const { id, startingBalance, remark } = req.body;
     const balance = parseFloat(startingBalance);
     try {
@@ -509,7 +508,6 @@ router.post("/admin/api/cashout", authenticateAdminToken, async (req, res) => {
     const customDate = transactionDate
       ? moment(transactionDate).utc().toDate()
       : moment().utc().toDate();
-    console.log(customDate);
     const transactionLog = new BankTransactionLog({
       bankName: bank.bankname,
       ownername: bank.ownername,
