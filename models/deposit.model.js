@@ -44,6 +44,10 @@ const depositschema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    bankAmount: {
+      type: Number,
+      default: null,
+    },
     walletamount: {
       type: Number,
     },

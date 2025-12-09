@@ -2284,6 +2284,9 @@ router.post(
       }
 
       const isFromWallet = deposit.bankname === "User Wallet";
+      const kioskAmount = deposit.amount;
+      const bankAmount = deposit.bankAmount || kioskAmount;
+      const saveToWalletAmount = bankAmount - kioskAmount;
 
       let bank = null;
       if (!isFromWallet && deposit.method !== "auto") {
@@ -2317,18 +2320,22 @@ router.post(
           : null;
       }
 
-      user.totaldeposit -= deposit.amount;
+      user.totaldeposit -= kioskAmount;
 
       if (isFromWallet) {
-        user.wallet = Number(user.wallet) + Number(deposit.amount);
+        user.wallet = Number(user.wallet) + Number(kioskAmount);
+      }
+
+      if (saveToWalletAmount > 0) {
+        user.wallet = Number(user.wallet) - saveToWalletAmount;
       }
 
       await user.save();
       await checkAndUpdateVIPLevel(user._id);
 
       if (!isFromWallet && deposit.method !== "auto" && bank) {
-        bank.currentbalance -= deposit.amount;
-        bank.totalDeposits -= deposit.amount;
+        bank.currentbalance -= bankAmount;
+        bank.totalDeposits -= bankAmount;
         await bank.save();
       }
 
@@ -2354,11 +2361,11 @@ router.post(
           ownername: bank.ownername,
           bankAccount: bank.bankaccount,
           remark: deposit.remark || "-",
-          lastBalance: bank.currentbalance + deposit.amount,
+          lastBalance: bank.currentbalance + bankAmount,
           currentBalance: bank.currentbalance,
           processby: adminuser.username,
           transactiontype: "reverted deposit",
-          amount: deposit.amount,
+          amount: bankAmount,
           qrimage: bank.qrimage,
           userid: user.userid,
           playerusername: user.username,
@@ -5063,6 +5070,8 @@ router.post(
         userId,
         username,
         amount,
+        bankAmount,
+        walletSaveAmount,
         kioskId,
         kioskName,
         bankId,
@@ -5070,12 +5079,36 @@ router.post(
         remark,
       } = req.body;
 
-      if (!userId || !username || !amount || amount <= 0) {
+      const kioskDepositAmount = Number(amount) || 0;
+      const totalBankAmount = Number(bankAmount) || kioskDepositAmount;
+      const saveToWalletAmount = Number(walletSaveAmount) || 0;
+
+      if (!userId || !username) {
         return res.status(200).json({
           success: false,
           message: {
             en: "Invalid request data",
             zh: "请求数据无效",
+          },
+        });
+      }
+
+      if (!fromWallet && kioskDepositAmount <= 0 && saveToWalletAmount <= 0) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Invalid amount",
+            zh: "金额无效",
+          },
+        });
+      }
+
+      if (fromWallet && kioskDepositAmount <= 0) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Invalid amount",
+            zh: "金额无效",
           },
         });
       }
@@ -5102,12 +5135,12 @@ router.post(
       }
 
       if (fromWallet) {
-        if (Number(user.wallet) < Number(amount)) {
+        if (Number(user.wallet) < kioskDepositAmount) {
           return res.status(200).json({
             success: false,
             message: {
-              en: `Insufficient wallet balance. Current: ${user.wallet}, Required: ${amount}`,
-              zh: `钱包余额不足。当前: ${user.wallet}，需要: ${amount}`,
+              en: `Insufficient wallet balance. Current: ${user.wallet}, Required: ${kioskDepositAmount}`,
+              zh: `钱包余额不足。当前: ${user.wallet}，需要: ${kioskDepositAmount}`,
             },
           });
         }
@@ -5128,6 +5161,16 @@ router.post(
       }
 
       const transactionId = uuidv4();
+
+      let finalRemark = remark || "-";
+      if (fromWallet) {
+        finalRemark = `${remark || "-"} | From Wallet`;
+      } else if (saveToWalletAmount > 0) {
+        finalRemark = `${
+          remark || "-"
+        } | Kiosk: ${kioskDepositAmount}, Save to Wallet: ${saveToWalletAmount}`;
+      }
+
       const newDeposit = new Deposit({
         transactionId,
         userId: user._id,
@@ -5141,11 +5184,12 @@ router.post(
         walletType: "Main",
         transactionType: "deposit",
         processBy: adminuser.username,
-        amount: Number(amount),
+        amount: kioskDepositAmount,
+        bankAmount: fromWallet ? null : totalBankAmount,
         walletamount: user.wallet,
         method: "admin",
         status: "approved",
-        remark: fromWallet ? `${remark || "-"} | From Wallet` : remark,
+        remark: finalRemark,
         game: kioskName,
         processtime: "0s",
         duplicateIP: user.duplicateIP || false,
@@ -5157,7 +5201,7 @@ router.post(
       const isFirstDeposit = user.firstDepositDate === null;
       const userUpdate = {
         $inc: {
-          totaldeposit: Number(amount),
+          totaldeposit: kioskDepositAmount,
         },
         $set: {
           lastdepositdate: new Date(),
@@ -5166,7 +5210,12 @@ router.post(
       };
 
       if (fromWallet) {
-        userUpdate.$inc.wallet = -Number(amount);
+        userUpdate.$inc.wallet = -kioskDepositAmount;
+      }
+
+      if (saveToWalletAmount > 0) {
+        userUpdate.$inc.wallet =
+          (userUpdate.$inc.wallet || 0) + saveToWalletAmount;
       }
 
       await User.findByIdAndUpdate(user._id, userUpdate);
@@ -5178,13 +5227,13 @@ router.post(
           [
             {
               $set: {
-                totalDeposits: { $add: ["$totalDeposits", Number(amount)] },
+                totalDeposits: { $add: ["$totalDeposits", totalBankAmount] },
                 currentbalance: {
                   $subtract: [
                     {
                       $add: [
                         "$startingbalance",
-                        { $add: ["$totalDeposits", Number(amount)] },
+                        { $add: ["$totalDeposits", totalBankAmount] },
                         "$totalCashIn",
                       ],
                     },
@@ -5204,8 +5253,8 @@ router.post(
           bankName: bank.bankname,
           ownername: bank.ownername,
           bankAccount: bank.bankaccount,
-          remark: remark,
-          lastBalance: updatedBank.currentbalance - Number(amount),
+          remark: finalRemark,
+          lastBalance: updatedBank.currentbalance - totalBankAmount,
           currentBalance: updatedBank.currentbalance,
           processby: adminuser.username,
           qrimage: bank.qrimage,
@@ -5213,7 +5262,7 @@ router.post(
           playerusername: user.username,
           playerfullname: user.fullname,
           transactiontype: "deposit",
-          amount: Number(amount),
+          amount: totalBankAmount,
         });
         await bankLog.save();
       }
@@ -5223,9 +5272,9 @@ router.post(
         transactionid: transactionId,
         transactiontime: new Date(),
         transactiontype: fromWallet ? "Deposit from Wallet" : "deposit",
-        amount: Number(amount),
+        amount: kioskDepositAmount,
         status: "approved",
-        remark: fromWallet ? `From Wallet` : remark,
+        remark: fromWallet ? "From Wallet" : remark,
         game: kioskName,
       });
       await walletLog.save();
@@ -5234,11 +5283,11 @@ router.post(
         success: true,
         message: {
           en: fromWallet
-            ? `Deposit of ${amount} from wallet approved for ${username}`
-            : `Deposit of ${amount} approved for ${username}`,
+            ? `Deposit of ${kioskDepositAmount} from wallet approved for ${username}`
+            : `Deposit of ${kioskDepositAmount} approved for ${username}`,
           zh: fromWallet
-            ? `已为 ${username} 批准从钱包存款 ${amount}`
-            : `已为 ${username} 批准 ${amount} 存款`,
+            ? `已为 ${username} 批准从钱包存款 ${kioskDepositAmount}`
+            : `已为 ${username} 批准 ${kioskDepositAmount} 存款`,
         },
         data: {
           depositId: newDeposit._id,
