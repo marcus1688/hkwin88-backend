@@ -4264,6 +4264,56 @@ router.get(
         ]),
       ]);
 
+      const newDepositBreakdown = await Deposit.aggregate([
+        {
+          $match: {
+            newDeposit: true,
+            status: "approved",
+            reverted: false,
+            ...dateFilter,
+          },
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "userId",
+            foreignField: "_id",
+            as: "user",
+          },
+        },
+        {
+          $unwind: "$user",
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "user.referralBy.user_id",
+            foreignField: "_id",
+            as: "referrer",
+          },
+        },
+        {
+          $unwind: {
+            path: "$referrer",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            userid: "$user.userid",
+            username: 1,
+            fullname: 1,
+            amount: 1,
+            referralByFullname: { $ifNull: ["$referrer.fullname", "-"] },
+            createdAt: 1,
+          },
+        },
+        {
+          $sort: { createdAt: -1 },
+        },
+      ]);
+
       const reportData = {
         depositQty: depositStats[0]?.depositQty || 0,
         totalDeposit: depositStats[0]?.totalDeposit || 0,
@@ -4291,6 +4341,7 @@ router.get(
           return allPlayers.length;
         })(),
         newDeposits: newDepositCount || 0,
+        newDepositBreakdown: newDepositBreakdown || [],
         newRegistrations: newRegistrations || 0,
         revertedTransactions:
           (revertedStats[0] || 0) +
