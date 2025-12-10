@@ -241,7 +241,7 @@ async function setJokerPassword(user, rate, password) {
     const updateFields =
       rate === "5x" ? { jokerGameTwoPW: password } : { jokerGamePW: password };
 
-    await User.updateMany({ username: user.username }, { $set: updateFields });
+    await User.updateMany({ gameId: user.gameId }, { $set: updateFields });
 
     return { success: true, data: response.data, password: password };
   } catch (error) {
@@ -290,7 +290,7 @@ async function registerJokerUser(user, rate) {
         ? { jokerGameTwoName: `${gameAPPID}.${username}` }
         : { jokerGameName: `${gameAPPID}.${username}` };
 
-    await User.updateMany({ username: user.username }, { $set: updateFields });
+    await User.updateMany({ gameId: user.gameId }, { $set: updateFields });
 
     const setPasswordResponse = await setJokerPassword(
       user,
