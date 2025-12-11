@@ -68,12 +68,12 @@ router.get(
         await Promise.all([
           Deposit.find(queryCondition)
             .select(
-              "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname game userid _id userId"
+              "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname game userid _id userId bankid transactionId"
             )
             .lean(),
           Withdraw.find(queryCondition)
             .select(
-              "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname game userid _id userId"
+              "username fullname bankname ownername transfernumber method transactionType amount status remark imageUrl createdAt processBy processtime _id reverted duplicateIP duplicateBank depositname game userid _id userId bankid transactionId"
             )
             .lean(),
           Bonus.find(queryCondition)
@@ -130,6 +130,8 @@ router.get(
           return {
             ...commonFields,
             bankname: transaction.bankname,
+            bankid: transaction.bankid,
+            transactionId: transaction.transactionId,
             ownername: transaction.ownername,
             transfernumber: transaction.transfernumber,
             imageUrl: transaction.imageUrl,

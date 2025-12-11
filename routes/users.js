@@ -5301,6 +5301,7 @@ router.post(
 
         const updatedBank = await BankList.findById(bankId);
         const bankLog = new BankTransactionLog({
+          transactionId,
           bankName: bank.bankname,
           ownername: bank.ownername,
           bankAccount: bank.bankaccount,
@@ -5593,6 +5594,7 @@ router.post(
         const updatedBank = await BankList.findById(bankId);
 
         const bankLog = new BankTransactionLog({
+          transactionId,
           bankName: bank.bankname,
           ownername: bank.ownername,
           bankAccount: bank.bankaccount,
@@ -6691,6 +6693,277 @@ router.post(
         message: {
           en: "Failed to update deposit newDeposit",
           zh: "更新存款 newDeposit 失败",
+        },
+      });
+    }
+  }
+);
+
+// Admin Change Transaction Bank
+router.post(
+  "/admin/api/change-transaction-bank",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const adminId = req.user.userId;
+      const adminuser = await adminUser.findById(adminId);
+      if (!adminuser) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Admin User not found",
+            zh: "未找到管理员用户",
+          },
+        });
+      }
+
+      const { transactionId, transactionType, newBankId } = req.body;
+
+      if (!transactionId || !transactionType || !newBankId) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Invalid request data",
+            zh: "请求数据无效",
+          },
+        });
+      }
+
+      if (!["deposit", "withdraw"].includes(transactionType)) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Invalid transaction type",
+            zh: "交易类型无效",
+          },
+        });
+      }
+
+      const newBank = await BankList.findById(newBankId);
+      if (!newBank) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "New bank not found",
+            zh: "找不到新银行",
+          },
+        });
+      }
+
+      let transaction;
+      const Model = transactionType === "deposit" ? Deposit : Withdraw;
+
+      transaction = await Model.findOne({ transactionId });
+      if (!transaction) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Transaction not found",
+            zh: "找不到交易记录",
+          },
+        });
+      }
+
+      // Skip if from/to wallet
+      if (!transaction.bankid) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Cannot change bank for wallet transactions",
+            zh: "钱包交易无法更改银行",
+          },
+        });
+      }
+
+      const oldBankId = transaction.bankid;
+
+      // Same bank check
+      if (oldBankId.toString() === newBankId) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "New bank is the same as current bank",
+            zh: "新银行与当前银行相同",
+          },
+        });
+      }
+
+      const bankLog = await BankTransactionLog.findOne({
+        transactionId: transactionId,
+      });
+      if (!bankLog) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Bank transaction log not found, cannot change bank for old transactions",
+            zh: "找不到银行交易记录，无法更改旧交易的银行",
+          },
+        });
+      }
+
+      const oldBank = await BankList.findById(oldBankId);
+      if (!oldBank) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Original bank not found",
+            zh: "找不到原银行",
+          },
+        });
+      }
+
+      const amount = transaction.bankAmount || transaction.amount;
+
+      if (transactionType === "deposit") {
+        // Reverse old bank: subtract deposit
+        await BankList.findByIdAndUpdate(oldBankId, [
+          {
+            $set: {
+              totalDeposits: { $subtract: ["$totalDeposits", amount] },
+              currentbalance: {
+                $subtract: [
+                  {
+                    $add: [
+                      "$startingbalance",
+                      { $subtract: ["$totalDeposits", amount] },
+                      "$totalCashIn",
+                    ],
+                  },
+                  { $add: ["$totalWithdrawals", "$totalCashOut"] },
+                ],
+              },
+            },
+          },
+        ]);
+
+        // Apply to new bank: add deposit
+        await BankList.findByIdAndUpdate(newBankId, [
+          {
+            $set: {
+              totalDeposits: { $add: ["$totalDeposits", amount] },
+              currentbalance: {
+                $subtract: [
+                  {
+                    $add: [
+                      "$startingbalance",
+                      { $add: ["$totalDeposits", amount] },
+                      "$totalCashIn",
+                    ],
+                  },
+                  { $add: ["$totalWithdrawals", "$totalCashOut"] },
+                ],
+              },
+            },
+          },
+        ]);
+      } else {
+        // Withdraw: reverse old bank (add back)
+        await BankList.findByIdAndUpdate(oldBankId, [
+          {
+            $set: {
+              totalWithdrawals: { $subtract: ["$totalWithdrawals", amount] },
+              currentbalance: {
+                $subtract: [
+                  {
+                    $add: [
+                      "$startingbalance",
+                      "$totalDeposits",
+                      "$totalCashIn",
+                    ],
+                  },
+                  {
+                    $add: [
+                      { $subtract: ["$totalWithdrawals", amount] },
+                      "$totalCashOut",
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        ]);
+
+        // Apply to new bank: subtract withdrawal
+        await BankList.findByIdAndUpdate(newBankId, [
+          {
+            $set: {
+              totalWithdrawals: { $add: ["$totalWithdrawals", amount] },
+              currentbalance: {
+                $subtract: [
+                  {
+                    $add: [
+                      "$startingbalance",
+                      "$totalDeposits",
+                      "$totalCashIn",
+                    ],
+                  },
+                  {
+                    $add: [
+                      { $add: ["$totalWithdrawals", amount] },
+                      "$totalCashOut",
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        ]);
+      }
+
+      // Update transaction record
+      await Model.findByIdAndUpdate(transaction._id, {
+        $set: {
+          bankid: newBank._id,
+          bankname: newBank.bankname,
+          ownername: newBank.ownername,
+          transfernumber: newBank.bankaccount,
+          remark: `${transaction.remark || "-"} | Bank changed from ${
+            oldBank.bankname
+          } to ${newBank.bankname} by ${adminuser.username}`,
+        },
+      });
+
+      // Update BankTransactionLog
+      const updatedNewBank = await BankList.findById(newBankId);
+      await BankTransactionLog.findByIdAndUpdate(bankLog._id, {
+        $set: {
+          bankName: newBank.bankname,
+          ownername: newBank.ownername,
+          bankAccount: newBank.bankaccount,
+          qrimage: newBank.qrimage,
+          remark: `${transaction.remark || "-"} | Bank changed by ${
+            adminuser.username
+          }`,
+          currentBalance: updatedNewBank.currentbalance,
+          lastBalance:
+            transactionType === "deposit"
+              ? updatedNewBank.currentbalance - amount
+              : updatedNewBank.currentbalance + amount,
+        },
+      });
+
+      res.status(200).json({
+        success: true,
+        message: {
+          en: `Bank changed from ${oldBank.bankname} to ${newBank.bankname} for ${transactionType}`,
+          zh: `${transactionType === "deposit" ? "存款" : "提款"}银行已从 ${
+            oldBank.bankname
+          } 更改为 ${newBank.bankname}`,
+        },
+        data: {
+          transactionId,
+          oldBank: oldBank.bankname,
+          newBank: newBank.bankname,
+          amount,
+        },
+      });
+    } catch (error) {
+      console.error("Error in change transaction bank:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
         },
       });
     }

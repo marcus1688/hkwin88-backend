@@ -3,6 +3,7 @@ const moment = require("moment");
 
 const bankTransactionLogSchema = new mongoose.Schema(
   {
+    transactionId: String,
     bankName: String,
     ownername: String,
     bankAccount: String,
