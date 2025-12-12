@@ -5289,7 +5289,11 @@ router.post(
                       ],
                     },
                     {
-                      $add: ["$totalWithdrawals", "$totalCashOut"],
+                      $add: [
+                        "$totalWithdrawals",
+                        "$totalCashOut",
+                        "$totalTransactionFees",
+                      ],
                     },
                   ],
                 },
@@ -5581,6 +5585,7 @@ router.post(
                       $add: [
                         { $add: ["$totalWithdrawals", totalBankAmount] },
                         "$totalCashOut",
+                        "$totalTransactionFees",
                       ],
                     },
                   ],
@@ -6829,7 +6834,13 @@ router.post(
                       "$totalCashIn",
                     ],
                   },
-                  { $add: ["$totalWithdrawals", "$totalCashOut"] },
+                  {
+                    $add: [
+                      "$totalWithdrawals",
+                      "$totalCashOut",
+                      "$totalTransactionFees",
+                    ],
+                  },
                 ],
               },
             },
@@ -6850,7 +6861,13 @@ router.post(
                       "$totalCashIn",
                     ],
                   },
-                  { $add: ["$totalWithdrawals", "$totalCashOut"] },
+                  {
+                    $add: [
+                      "$totalWithdrawals",
+                      "$totalCashOut",
+                      "$totalTransactionFees",
+                    ],
+                  },
                 ],
               },
             },
@@ -6875,6 +6892,7 @@ router.post(
                     $add: [
                       { $subtract: ["$totalWithdrawals", amount] },
                       "$totalCashOut",
+                      "$totalTransactionFees",
                     ],
                   },
                 ],
@@ -6901,6 +6919,7 @@ router.post(
                     $add: [
                       { $add: ["$totalWithdrawals", amount] },
                       "$totalCashOut",
+                      "$totalTransactionFees",
                     ],
                   },
                 ],
