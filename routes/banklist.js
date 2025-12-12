@@ -74,6 +74,10 @@ router.post(
         transactionlimit,
         transactionamountlimit,
         remark,
+        dailydepositamountlimit,
+        dailywithdrawamountlimit,
+        monthlydepositamountlimit,
+        monthlywithdrawamountlimit,
       } = req.body;
       let qrImageUrl = null;
       if (req.file) {
@@ -99,6 +103,10 @@ router.post(
         transactionamountlimit,
         remark,
         qrimage: qrImageUrl,
+        dailydepositamountlimit: parseFloat(dailydepositamountlimit) || 0,
+        dailywithdrawamountlimit: parseFloat(dailywithdrawamountlimit) || 0,
+        monthlydepositamountlimit: parseFloat(monthlydepositamountlimit) || 0,
+        monthlywithdrawamountlimit: parseFloat(monthlywithdrawamountlimit) || 0,
       });
 
       res.status(200).json({
@@ -189,6 +197,14 @@ router.patch(
         transactionamountlimit: req.body.transactionamountlimit,
         remark: req.body.remark,
         qrimage: qrImageUrl,
+        dailydepositamountlimit:
+          parseFloat(req.body.dailydepositamountlimit) || 0,
+        dailywithdrawamountlimit:
+          parseFloat(req.body.dailywithdrawamountlimit) || 0,
+        monthlydepositamountlimit:
+          parseFloat(req.body.monthlydepositamountlimit) || 0,
+        monthlywithdrawamountlimit:
+          parseFloat(req.body.monthlywithdrawamountlimit) || 0,
       };
 
       const updatedBank = await BankList.findByIdAndUpdate(id, updateData, {

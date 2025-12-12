@@ -1,6 +1,5 @@
 const mongoose = require("mongoose");
 const moment = require("moment");
-
 const banklistScehma = new mongoose.Schema(
   {
     bankname: String,
@@ -47,14 +46,28 @@ const banklistScehma = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    dailydepositamountlimit: {
+      type: Number,
+      default: 0,
+    },
+    dailywithdrawamountlimit: {
+      type: Number,
+      default: 0,
+    },
+    monthlydepositamountlimit: {
+      type: Number,
+      default: 0,
+    },
+    monthlywithdrawamountlimit: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: {
-      currentTime: () => moment().utc().toDate(), // Ensure timestamps are stored in UTC
+      currentTime: () => moment().utc().toDate(),
     },
   }
 );
-
 const BankList = mongoose.model("BankList", banklistScehma);
-
 module.exports = BankList;

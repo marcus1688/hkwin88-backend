@@ -6969,5 +6969,251 @@ router.post(
     }
   }
 );
+
+// Check Bank Deposit/Withdraw Limit
+router.post(
+  "/admin/api/check-bank-limit",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { bankId, amount, type } = req.body; // type: 'deposit' or 'withdraw'
+      const checkAmount = parseFloat(amount) || 0;
+
+      const bank = await BankList.findById(bankId);
+      if (!bank) {
+        return res.status(200).json({
+          success: true,
+          hasWarning: false,
+        });
+      }
+
+      // 获取 UTC+8 的今天开始和结束时间
+      const todayStart = moment().utcOffset(8).startOf("day").utc().toDate();
+      const todayEnd = moment().utcOffset(8).endOf("day").utc().toDate();
+
+      // 获取 UTC+8 的本月开始和结束时间
+      const monthStart = moment().utcOffset(8).startOf("month").utc().toDate();
+      const monthEnd = moment().utcOffset(8).endOf("month").utc().toDate();
+
+      let dailyTotal = 0;
+      let monthlyTotal = 0;
+      let dailyLimit = 0;
+      let monthlyLimit = 0;
+
+      if (type === "deposit") {
+        dailyLimit = bank.dailydepositamountlimit || 0;
+        monthlyLimit = bank.monthlydepositamountlimit || 0;
+
+        // 计算今日 deposit 总额
+        const dailyDeposits = await Deposit.aggregate([
+          {
+            $match: {
+              status: "approved",
+              reverted: false,
+              bankid: bankId,
+              createdAt: { $gte: todayStart, $lte: todayEnd },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: { $ifNull: ["$bankAmount", "$amount"] } },
+            },
+          },
+        ]);
+
+        // 计算今日 cashin 总额
+        const dailyCashIn = await BankTransactionLog.aggregate([
+          {
+            $match: {
+              bankName: bank.bankname,
+              ownername: bank.ownername,
+              bankAccount: bank.bankaccount,
+              transactiontype: { $in: ["cashin", "CashIn", "CASHIN"] },
+              createdAt: { $gte: todayStart, $lte: todayEnd },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: "$amount" },
+            },
+          },
+        ]);
+
+        dailyTotal =
+          (dailyDeposits[0]?.total || 0) + (dailyCashIn[0]?.total || 0);
+
+        // 计算本月 deposit 总额
+        const monthlyDeposits = await Deposit.aggregate([
+          {
+            $match: {
+              status: "approved",
+              reverted: false,
+              bankid: bankId,
+              createdAt: { $gte: monthStart, $lte: monthEnd },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: { $ifNull: ["$bankAmount", "$amount"] } },
+            },
+          },
+        ]);
+
+        // 计算本月 cashin 总额
+        const monthlyCashIn = await BankTransactionLog.aggregate([
+          {
+            $match: {
+              bankName: bank.bankname,
+              ownername: bank.ownername,
+              bankAccount: bank.bankaccount,
+              transactiontype: { $in: ["cashin", "CashIn", "CASHIN"] },
+              createdAt: { $gte: monthStart, $lte: monthEnd },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: "$amount" },
+            },
+          },
+        ]);
+
+        monthlyTotal =
+          (monthlyDeposits[0]?.total || 0) + (monthlyCashIn[0]?.total || 0);
+      } else if (type === "withdraw") {
+        dailyLimit = bank.dailywithdrawamountlimit || 0;
+        monthlyLimit = bank.monthlywithdrawamountlimit || 0;
+
+        // 计算今日 withdraw 总额
+        const dailyWithdraws = await Withdraw.aggregate([
+          {
+            $match: {
+              status: "approved",
+              reverted: false,
+              bankid: bankId,
+              createdAt: { $gte: todayStart, $lte: todayEnd },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: { $ifNull: ["$bankAmount", "$amount"] } },
+            },
+          },
+        ]);
+
+        // 计算今日 cashout 总额
+        const dailyCashOut = await BankTransactionLog.aggregate([
+          {
+            $match: {
+              bankName: bank.bankname,
+              ownername: bank.ownername,
+              bankAccount: bank.bankaccount,
+              transactiontype: { $in: ["cashout", "CashOut", "CASHOUT"] },
+              createdAt: { $gte: todayStart, $lte: todayEnd },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: "$amount" },
+            },
+          },
+        ]);
+
+        dailyTotal =
+          (dailyWithdraws[0]?.total || 0) + (dailyCashOut[0]?.total || 0);
+
+        // 计算本月 withdraw 总额
+        const monthlyWithdraws = await Withdraw.aggregate([
+          {
+            $match: {
+              status: "approved",
+              reverted: false,
+              bankid: bankId,
+              createdAt: { $gte: monthStart, $lte: monthEnd },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: { $ifNull: ["$bankAmount", "$amount"] } },
+            },
+          },
+        ]);
+
+        // 计算本月 cashout 总额
+        const monthlyCashOut = await BankTransactionLog.aggregate([
+          {
+            $match: {
+              bankName: bank.bankname,
+              ownername: bank.ownername,
+              bankAccount: bank.bankaccount,
+              transactiontype: { $in: ["cashout", "CashOut", "CASHOUT"] },
+              createdAt: { $gte: monthStart, $lte: monthEnd },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: "$amount" },
+            },
+          },
+        ]);
+
+        monthlyTotal =
+          (monthlyWithdraws[0]?.total || 0) + (monthlyCashOut[0]?.total || 0);
+      }
+
+      const warnings = [];
+
+      // 检查 daily limit
+      if (dailyLimit > 0 && dailyTotal + checkAmount > dailyLimit) {
+        warnings.push({
+          type: "daily",
+          currentTotal: dailyTotal,
+          newAmount: checkAmount,
+          afterTotal: dailyTotal + checkAmount,
+          limit: dailyLimit,
+        });
+      }
+
+      // 检查 monthly limit
+      if (monthlyLimit > 0 && monthlyTotal + checkAmount > monthlyLimit) {
+        warnings.push({
+          type: "monthly",
+          currentTotal: monthlyTotal,
+          newAmount: checkAmount,
+          afterTotal: monthlyTotal + checkAmount,
+          limit: monthlyLimit,
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        hasWarning: warnings.length > 0,
+        warnings,
+        data: {
+          dailyTotal,
+          monthlyTotal,
+          dailyLimit,
+          monthlyLimit,
+        },
+      });
+    } catch (error) {
+      console.error("Error checking bank limit:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
 module.exports = router;
 module.exports.checkAndUpdateVIPLevel = checkAndUpdateVIPLevel;
