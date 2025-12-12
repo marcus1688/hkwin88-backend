@@ -640,7 +640,9 @@ router.get(
         {
           $group: {
             _id: "$bankid",
-            totalDeposits: { $sum: "$amount" },
+            totalDeposits: {
+              $sum: { $ifNull: ["$bankAmount", "$amount"] },
+            },
           },
         },
       ]);
