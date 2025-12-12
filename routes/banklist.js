@@ -723,8 +723,10 @@ router.get(
           bankName: bank.bankname,
           bankAccount: bank.bankaccount,
           ownername: bank.ownername,
-          totalDeposit: depositStat.totalDeposits || 0,
-          totalWithdraw: withdrawStat.totalWithdrawals || 0,
+          totalDeposit:
+            (depositStat.totalDeposits || 0) + (cashStat.totalCashIn || 0),
+          totalWithdraw:
+            (withdrawStat.totalWithdrawals || 0) + (cashStat.totalCashOut || 0),
           totalCashIn: cashStat.totalCashIn || 0,
           totalCashOut: cashStat.totalCashOut || 0,
           currentBalance: bank.currentbalance,
