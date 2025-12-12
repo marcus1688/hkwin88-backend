@@ -491,41 +491,107 @@ router.post("/admin/api/cashout", authenticateAdminToken, async (req, res) => {
         },
       });
     }
-    if (bank.currentbalance < cashOutAmount) {
-      return res.status(200).json({
-        success: false,
-        message: {
-          en: "Insufficient balance",
-          zh: "余额不足",
-        },
-      });
-    }
-    const oldBalance = bank.currentbalance;
-    bank.totalCashOut += cashOutAmount;
-    bank.currentbalance -= cashOutAmount;
-    await bank.save();
-
     const customDate = transactionDate
       ? moment(transactionDate).utc().toDate()
-      : moment().utc().toDate();
-    const transactionLog = new BankTransactionLog({
-      bankName: bank.bankname,
-      ownername: bank.ownername,
-      bankAccount: bank.bankaccount,
-      remark: remark,
-      lastBalance: oldBalance,
-      currentBalance: bank.currentbalance,
-      processby: adminuser.username,
-      transactiontype: "cashout",
-      amount: cashOutAmount,
-      qrimage: bank.qrimage,
-      playerusername: "n/a",
-      playerfullname: "n/a",
-      createdAt: customDate,
-      updatedAt: customDate,
-    });
-    await transactionLog.save();
-
+      : null;
+    const isBackdated =
+      customDate && moment(customDate).isBefore(moment(), "day");
+    if (isBackdated) {
+      const previousTransaction = await BankTransactionLog.findOne({
+        bankName: bank.bankname,
+        ownername: bank.ownername,
+        bankAccount: bank.bankaccount,
+        createdAt: { $lt: customDate },
+      }).sort({ createdAt: -1, _id: -1 });
+      const balanceBeforeInsert = previousTransaction
+        ? previousTransaction.currentBalance
+        : bank.startingbalance;
+      if (balanceBeforeInsert < cashOutAmount) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Insufficient balance at that date",
+            zh: "该日期余额不足",
+          },
+        });
+      }
+      const newTransaction = new BankTransactionLog({
+        bankName: bank.bankname,
+        ownername: bank.ownername,
+        bankAccount: bank.bankaccount,
+        remark: remark || "-",
+        lastBalance: balanceBeforeInsert,
+        currentBalance: balanceBeforeInsert - cashOutAmount,
+        processby: adminuser.username,
+        transactiontype: "cashout",
+        amount: cashOutAmount,
+        qrimage: bank.qrimage,
+        playerusername: "n/a",
+        playerfullname: "n/a",
+        createdAt: customDate,
+        updatedAt: customDate,
+      });
+      await newTransaction.save();
+      const subsequentTransactions = await BankTransactionLog.find({
+        bankName: bank.bankname,
+        ownername: bank.ownername,
+        bankAccount: bank.bankaccount,
+        createdAt: { $gte: customDate },
+        _id: { $ne: newTransaction._id },
+      }).sort({ createdAt: 1, _id: 1 });
+      let runningBalance = newTransaction.currentBalance;
+      for (const txn of subsequentTransactions) {
+        const txnAmount = txn.amount || 0;
+        const oldCurrentBalance = txn.currentBalance;
+        txn.lastBalance = runningBalance;
+        if (
+          txn.transactiontype === "deposit" ||
+          txn.transactiontype === "cashin"
+        ) {
+          txn.currentBalance = runningBalance + txnAmount;
+        } else if (
+          txn.transactiontype === "withdraw" ||
+          txn.transactiontype === "cashout" ||
+          txn.transactiontype === "transactionfee"
+        ) {
+          txn.currentBalance = runningBalance - txnAmount;
+        }
+        runningBalance = txn.currentBalance;
+        await txn.save();
+      }
+      bank.currentbalance = runningBalance;
+      bank.totalCashOut += cashOutAmount;
+      await bank.save();
+    } else {
+      if (bank.currentbalance < cashOutAmount) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Insufficient balance",
+            zh: "余额不足",
+          },
+        });
+      }
+      const oldBalance = bank.currentbalance;
+      bank.totalCashOut += cashOutAmount;
+      bank.currentbalance -= cashOutAmount;
+      await bank.save();
+      const transactionLog = new BankTransactionLog({
+        bankName: bank.bankname,
+        ownername: bank.ownername,
+        bankAccount: bank.bankaccount,
+        remark: remark || "-",
+        lastBalance: oldBalance,
+        currentBalance: bank.currentbalance,
+        processby: adminuser.username,
+        transactiontype: "cashout",
+        amount: cashOutAmount,
+        qrimage: bank.qrimage,
+        playerusername: "n/a",
+        playerfullname: "n/a",
+      });
+      await transactionLog.save();
+    }
     res.status(200).json({
       success: true,
       message: {
