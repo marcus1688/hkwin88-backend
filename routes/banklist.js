@@ -370,7 +370,8 @@ router.patch(
         bank.totalDeposits -
         bank.totalWithdrawals +
         bank.totalCashIn -
-        bank.totalCashOut;
+        bank.totalCashOut -
+        bank.totalTransactionFees;
       await bank.save();
       const transactionLog = new BankTransactionLog({
         bankName: bank.bankname,
@@ -690,6 +691,7 @@ router.get(
               $in: [
                 "cashin",
                 "cashout",
+                "transactionfee",
                 "CashIn",
                 "CashOut",
                 "CASHIN",
@@ -720,6 +722,17 @@ router.get(
                 ],
               },
             },
+            totalTransactionFees: {
+              $sum: {
+                $cond: [
+                  {
+                    $in: [{ $toLower: "$transactiontype" }, ["transactionfee"]],
+                  },
+                  "$amount",
+                  0,
+                ],
+              },
+            },
           },
         },
       ]);
@@ -745,6 +758,7 @@ router.get(
             (withdrawStat.totalWithdrawals || 0) + (cashStat.totalCashOut || 0),
           totalCashIn: cashStat.totalCashIn || 0,
           totalCashOut: cashStat.totalCashOut || 0,
+          totalTransactionFees: cashStat.totalTransactionFees || 0,
           currentBalance: bank.currentbalance,
         };
       });
@@ -755,6 +769,8 @@ router.get(
           totalWithdraw: (acc.totalWithdraw || 0) + bank.totalWithdraw,
           totalCashIn: (acc.totalCashIn || 0) + bank.totalCashIn,
           totalCashOut: (acc.totalCashOut || 0) + bank.totalCashOut,
+          totalTransactionFees:
+            (acc.totalTransactionFees || 0) + bank.totalTransactionFees,
         }),
         {}
       );
@@ -773,6 +789,136 @@ router.get(
         success: false,
         message: "Internal server error",
         error: error.toString(),
+      });
+    }
+  }
+);
+
+// Admnin Cashout Transaction Fees
+router.post(
+  "/admin/api/transactionfeescashout",
+  authenticateAdminToken,
+  async (req, res) => {
+    const { id, amount } = req.body;
+    const cashOutAmount = parseFloat(amount);
+    try {
+      const adminId = req.user.userId;
+      const adminuser = await adminUser.findById(adminId);
+      if (!adminuser) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Admin User not found, please contact customer service",
+            zh: "找不到管理员用户，请联系客服",
+          },
+        });
+      }
+      const bank = await BankList.findById(id);
+      if (!bank) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Bank list not found",
+            zh: "找不到银行列表",
+          },
+        });
+      }
+      const customDate = moment()
+        .utcOffset(8)
+        .subtract(1, "day")
+        .set({
+          hour: 23,
+          minute: 59,
+          second: 50,
+          millisecond: 0,
+        })
+        .utc()
+        .toDate();
+      const remark = "transaction fees";
+      const previousTransaction = await BankTransactionLog.findOne({
+        bankName: bank.bankname,
+        ownername: bank.ownername,
+        bankAccount: bank.bankaccount,
+        createdAt: { $lt: customDate },
+      }).sort({ createdAt: -1, _id: -1 });
+      const balanceBeforeInsert = previousTransaction
+        ? previousTransaction.currentBalance
+        : bank.startingbalance;
+      if (balanceBeforeInsert < cashOutAmount) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Insufficient balance at that date",
+            zh: "该日期余额不足",
+          },
+        });
+      }
+      const newTransaction = new BankTransactionLog({
+        bankName: bank.bankname,
+        ownername: bank.ownername,
+        bankAccount: bank.bankaccount,
+        remark: remark,
+        lastBalance: balanceBeforeInsert,
+        currentBalance: balanceBeforeInsert - cashOutAmount,
+        processby: adminuser.username,
+        transactiontype: "transactionfee",
+        amount: cashOutAmount,
+        qrimage: bank.qrimage,
+        playerusername: "n/a",
+        playerfullname: "n/a",
+        createdAt: customDate,
+        updatedAt: customDate,
+      });
+      await newTransaction.save();
+      const subsequentTransactions = await BankTransactionLog.find({
+        bankName: bank.bankname,
+        ownername: bank.ownername,
+        bankAccount: bank.bankaccount,
+        createdAt: { $gte: customDate },
+        _id: { $ne: newTransaction._id },
+      }).sort({ createdAt: 1, _id: 1 });
+      let runningBalance = newTransaction.currentBalance;
+      for (const txn of subsequentTransactions) {
+        const txnAmount = txn.amount || 0;
+        txn.lastBalance = runningBalance;
+        const type = txn.transactiontype.toLowerCase();
+        if (type === "deposit" || type === "cashin") {
+          txn.currentBalance = runningBalance + txnAmount;
+        } else if (
+          type === "withdraw" ||
+          type === "cashout" ||
+          type === "transactionfee"
+        ) {
+          txn.currentBalance = runningBalance - txnAmount;
+        } else if (type === "reverted deposit") {
+          txn.currentBalance = runningBalance - txnAmount;
+        } else if (type === "reverted withdraw") {
+          txn.currentBalance = runningBalance + txnAmount;
+        } else {
+          txn.currentBalance = runningBalance;
+        }
+        runningBalance = txn.currentBalance;
+        await txn.save();
+      }
+      bank.currentbalance = runningBalance;
+      bank.totalTransactionFees += cashOutAmount;
+      await bank.save();
+      res.status(200).json({
+        success: true,
+        message: {
+          en: "Transaction fees processed successfully",
+          zh: "交易费用处理成功",
+        },
+        data: bank,
+      });
+    } catch (error) {
+      console.error("Error processing transaction fees:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
       });
     }
   }
