@@ -411,7 +411,7 @@ router.patch(
 
 // Admin Cash In
 router.post("/admin/api/cashin", authenticateAdminToken, async (req, res) => {
-  const { id, amount, remark, transactionDate } = req.body;
+  const { id, amount, remark, transactionDate, affectTotal } = req.body;
   const cashInAmount = parseFloat(amount);
   try {
     const adminId = req.user.userId;
@@ -435,32 +435,95 @@ router.post("/admin/api/cashin", authenticateAdminToken, async (req, res) => {
         },
       });
     }
-    const oldBalance = bank.currentbalance;
-    bank.totalCashIn += cashInAmount;
-    bank.currentbalance += cashInAmount;
-    await bank.save();
 
     const customDate = transactionDate
       ? moment(transactionDate).utc().toDate()
-      : moment().utc().toDate();
+      : null;
+    const isBackdated =
+      customDate && moment(customDate).isBefore(moment(), "day");
 
-    const transactionLog = new BankTransactionLog({
-      bankName: bank.bankname,
-      ownername: bank.ownername,
-      bankAccount: bank.bankaccount,
-      remark: remark,
-      lastBalance: oldBalance,
-      currentBalance: bank.currentbalance,
-      processby: adminuser.username,
-      transactiontype: "cashin",
-      amount: cashInAmount,
-      qrimage: bank.qrimage,
-      playerusername: "n/a",
-      playerfullname: "n/a",
-      createdAt: customDate,
-      updatedAt: customDate,
-    });
-    await transactionLog.save();
+    if (isBackdated) {
+      const previousTransaction = await BankTransactionLog.findOne({
+        bankName: bank.bankname,
+        ownername: bank.ownername,
+        bankAccount: bank.bankaccount,
+        createdAt: { $lt: customDate },
+      }).sort({ createdAt: -1, _id: -1 });
+
+      const balanceBeforeInsert = previousTransaction
+        ? previousTransaction.currentBalance
+        : bank.startingbalance;
+
+      const newTransaction = new BankTransactionLog({
+        bankName: bank.bankname,
+        ownername: bank.ownername,
+        bankAccount: bank.bankaccount,
+        remark: remark || "-",
+        lastBalance: balanceBeforeInsert,
+        currentBalance: balanceBeforeInsert + cashInAmount,
+        processby: adminuser.username,
+        transactiontype: affectTotal ? "cashin" : "adjustin",
+        amount: cashInAmount,
+        qrimage: bank.qrimage,
+        playerusername: "n/a",
+        playerfullname: "n/a",
+        createdAt: customDate,
+        updatedAt: customDate,
+      });
+      await newTransaction.save();
+
+      const subsequentTransactions = await BankTransactionLog.find({
+        bankName: bank.bankname,
+        ownername: bank.ownername,
+        bankAccount: bank.bankaccount,
+        createdAt: { $gte: customDate },
+        _id: { $ne: newTransaction._id },
+      }).sort({ createdAt: 1, _id: 1 });
+
+      let runningBalance = newTransaction.currentBalance;
+      for (const txn of subsequentTransactions) {
+        const txnAmount = txn.amount || 0;
+        txn.lastBalance = runningBalance;
+        if (
+          txn.transactiontype === "deposit" ||
+          txn.transactiontype === "cashin"
+        ) {
+          txn.currentBalance = runningBalance + txnAmount;
+        } else if (
+          txn.transactiontype === "withdraw" ||
+          txn.transactiontype === "cashout" ||
+          txn.transactiontype === "transactionfee"
+        ) {
+          txn.currentBalance = runningBalance - txnAmount;
+        }
+        runningBalance = txn.currentBalance;
+        await txn.save();
+      }
+      bank.currentbalance = runningBalance;
+      bank.totalCashIn += cashInAmount;
+      await bank.save();
+    } else {
+      const oldBalance = bank.currentbalance;
+      bank.totalCashIn += cashInAmount;
+      bank.currentbalance += cashInAmount;
+      await bank.save();
+
+      const transactionLog = new BankTransactionLog({
+        bankName: bank.bankname,
+        ownername: bank.ownername,
+        bankAccount: bank.bankaccount,
+        remark: remark || "-",
+        lastBalance: oldBalance,
+        currentBalance: bank.currentbalance,
+        processby: adminuser.username,
+        transactiontype: affectTotal ? "cashin" : "adjustin",
+        amount: cashInAmount,
+        qrimage: bank.qrimage,
+        playerusername: "n/a",
+        playerfullname: "n/a",
+      });
+      await transactionLog.save();
+    }
 
     res.status(200).json({
       success: true,
@@ -484,7 +547,7 @@ router.post("/admin/api/cashin", authenticateAdminToken, async (req, res) => {
 
 // Admin Cash Out
 router.post("/admin/api/cashout", authenticateAdminToken, async (req, res) => {
-  const { id, amount, remark, transactionDate } = req.body;
+  const { id, amount, remark, transactionDate, affectTotal } = req.body;
   const cashOutAmount = parseFloat(amount);
   try {
     const adminId = req.user.userId;
@@ -540,7 +603,7 @@ router.post("/admin/api/cashout", authenticateAdminToken, async (req, res) => {
         lastBalance: balanceBeforeInsert,
         currentBalance: balanceBeforeInsert - cashOutAmount,
         processby: adminuser.username,
-        transactiontype: "cashout",
+        transactiontype: affectTotal ? "cashout" : "adjustout",
         amount: cashOutAmount,
         qrimage: bank.qrimage,
         playerusername: "n/a",
@@ -601,7 +664,7 @@ router.post("/admin/api/cashout", authenticateAdminToken, async (req, res) => {
         lastBalance: oldBalance,
         currentBalance: bank.currentbalance,
         processby: adminuser.username,
-        transactiontype: "cashout",
+        transactiontype: affectTotal ? "cashout" : "adjustout",
         amount: cashOutAmount,
         qrimage: bank.qrimage,
         playerusername: "n/a",
@@ -691,11 +754,9 @@ router.get(
               $in: [
                 "cashin",
                 "cashout",
+                "adjustin",
+                "adjustout",
                 "transactionfee",
-                "CashIn",
-                "CashOut",
-                "CASHIN",
-                "CASHOUT",
               ],
             },
             ...dateFilter,
@@ -706,8 +767,13 @@ router.get(
             _id: "$bankAccount",
             totalCashIn: {
               $sum: {
+                $cond: [{ $eq: ["$transactiontype", "cashin"] }, "$amount", 0],
+              },
+            },
+            totalAdjustIn: {
+              $sum: {
                 $cond: [
-                  { $in: [{ $toLower: "$transactiontype" }, ["cashin"]] },
+                  { $eq: ["$transactiontype", "adjustin"] },
                   "$amount",
                   0,
                 ],
@@ -715,8 +781,13 @@ router.get(
             },
             totalCashOut: {
               $sum: {
+                $cond: [{ $eq: ["$transactiontype", "cashout"] }, "$amount", 0],
+              },
+            },
+            totalAdjustOut: {
+              $sum: {
                 $cond: [
-                  { $in: [{ $toLower: "$transactiontype" }, ["cashout"]] },
+                  { $eq: ["$transactiontype", "adjustout"] },
                   "$amount",
                   0,
                 ],
@@ -725,9 +796,7 @@ router.get(
             totalTransactionFees: {
               $sum: {
                 $cond: [
-                  {
-                    $in: [{ $toLower: "$transactiontype" }, ["transactionfee"]],
-                  },
+                  { $eq: ["$transactiontype", "transactionfee"] },
                   "$amount",
                   0,
                 ],
@@ -758,6 +827,8 @@ router.get(
             (withdrawStat.totalWithdrawals || 0) + (cashStat.totalCashOut || 0),
           totalCashIn: cashStat.totalCashIn || 0,
           totalCashOut: cashStat.totalCashOut || 0,
+          totalAdjustIn: cashStat.totalAdjustIn || 0,
+          totalAdjustOut: cashStat.totalAdjustOut || 0,
           totalTransactionFees: cashStat.totalTransactionFees || 0,
           currentBalance: bank.currentbalance,
         };
@@ -769,6 +840,8 @@ router.get(
           totalWithdraw: (acc.totalWithdraw || 0) + bank.totalWithdraw,
           totalCashIn: (acc.totalCashIn || 0) + bank.totalCashIn,
           totalCashOut: (acc.totalCashOut || 0) + bank.totalCashOut,
+          totalAdjustIn: (acc.totalAdjustIn || 0) + bank.totalAdjustIn,
+          totalAdjustOut: (acc.totalAdjustOut || 0) + bank.totalAdjustOut,
           totalTransactionFees:
             (acc.totalTransactionFees || 0) + bank.totalTransactionFees,
         }),
@@ -913,6 +986,58 @@ router.post(
       });
     } catch (error) {
       console.error("Error processing transaction fees:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
+
+// Admin Toggle Transaction Type
+router.patch(
+  "/admin/api/toggletransactiontype",
+  authenticateAdminToken,
+  async (req, res) => {
+    const { id, newType } = req.body;
+    try {
+      const validTypes = ["cashin", "adjustin", "cashout", "adjustout"];
+      if (!validTypes.includes(newType)) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Invalid transaction type",
+            zh: "无效的交易类型",
+          },
+        });
+      }
+
+      const transaction = await BankTransactionLog.findById(id);
+      if (!transaction) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Transaction not found",
+            zh: "交易记录未找到",
+          },
+        });
+      }
+
+      transaction.transactiontype = newType;
+      await transaction.save();
+
+      res.status(200).json({
+        success: true,
+        message: {
+          en: "Transaction type updated successfully",
+          zh: "交易类型更新成功",
+        },
+      });
+    } catch (error) {
+      console.error("Error toggling transaction type:", error);
       res.status(500).json({
         success: false,
         message: {
