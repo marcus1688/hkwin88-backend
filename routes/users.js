@@ -4028,6 +4028,7 @@ router.get(
             $match: {
               status: "approved",
               reverted: false,
+              bankname: { $ne: "User Wallet" },
               ...dateFilter,
             },
           },
@@ -4035,7 +4036,7 @@ router.get(
             $group: {
               _id: null,
               depositQty: { $sum: 1 },
-              totalDeposit: { $sum: "$amount" },
+              totalDeposit: { $sum: { $ifNull: ["$bankAmount", "$amount"] } },
               uniquePlayers: { $addToSet: "$username" },
               totalProcessTime: {
                 $sum: {
@@ -4097,6 +4098,7 @@ router.get(
             $match: {
               status: "approved",
               reverted: false,
+              bankname: { $ne: "User Wallet" },
               ...dateFilter,
             },
           },
@@ -4104,7 +4106,7 @@ router.get(
             $group: {
               _id: null,
               withdrawQty: { $sum: 1 },
-              totalWithdraw: { $sum: "$amount" },
+              totalWithdraw: { $sum: { $ifNull: ["$bankAmount", "$amount"] } },
               uniquePlayers: { $addToSet: "$username" },
               totalProcessTime: {
                 $sum: {
