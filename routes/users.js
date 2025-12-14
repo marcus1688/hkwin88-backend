@@ -5275,7 +5275,7 @@ router.post(
       await checkAndUpdateVIPLevel(user._id);
 
       if (!fromWallet) {
-        await BankList.findByIdAndUpdate(
+        const updatedBank = await BankList.findByIdAndUpdate(
           bankId,
           [
             {
@@ -5302,10 +5302,10 @@ router.post(
               },
             },
           ],
-          { new: true }
+          { new: true } // 返回更新后的文档
         );
 
-        const updatedBank = await BankList.findById(bankId);
+        // 直接用 updatedBank，不需要再 findById
         const bankLog = new BankTransactionLog({
           transactionId,
           bankName: bank.bankname,
@@ -5566,7 +5566,7 @@ router.post(
         }
         await User.findByIdAndUpdate(user._id, userUpdate);
 
-        await BankList.findByIdAndUpdate(
+        const updatedBank = await BankList.findByIdAndUpdate(
           bankId,
           [
             {
@@ -5597,8 +5597,6 @@ router.post(
           ],
           { new: true }
         );
-
-        const updatedBank = await BankList.findById(bankId);
 
         const bankLog = new BankTransactionLog({
           transactionId,
