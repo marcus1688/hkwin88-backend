@@ -1001,21 +1001,6 @@ router.post(
   }
 );
 
-router.get("/admin/api/check-transaction-types", async (req, res) => {
-  try {
-    const types = await BankTransactionLog.distinct("transactiontype");
-    res.status(200).json({
-      success: true,
-      data: {
-        types,
-        count: types.length,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
 // Recalculate-bank-balance
 router.post(
   "/admin/api/recalculate-bank-balance",
