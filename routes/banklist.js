@@ -955,18 +955,22 @@ router.post(
         const txnAmount = txn.amount || 0;
         txn.lastBalance = runningBalance;
         const type = txn.transactiontype.toLowerCase();
-        if (type === "deposit" || type === "cashin") {
+        if (
+          type === "deposit" ||
+          type === "cashin" ||
+          type === "adjustin" ||
+          type === "adjust starting balance" ||
+          type === "reverted withdraw"
+        ) {
           txn.currentBalance = runningBalance + txnAmount;
         } else if (
           type === "withdraw" ||
           type === "cashout" ||
-          type === "transactionfee"
+          type === "transactionfee" ||
+          type === "adjustout" ||
+          type === "reverted deposit"
         ) {
           txn.currentBalance = runningBalance - txnAmount;
-        } else if (type === "reverted deposit") {
-          txn.currentBalance = runningBalance - txnAmount;
-        } else if (type === "reverted withdraw") {
-          txn.currentBalance = runningBalance + txnAmount;
         } else {
           txn.currentBalance = runningBalance;
         }
@@ -986,6 +990,113 @@ router.post(
       });
     } catch (error) {
       console.error("Error processing transaction fees:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
+
+router.get("/admin/api/check-transaction-types", async (req, res) => {
+  try {
+    const types = await BankTransactionLog.distinct("transactiontype");
+    res.status(200).json({
+      success: true,
+      data: {
+        types,
+        count: types.length,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Recalculate-bank-balance
+router.post(
+  "/admin/api/recalculate-bank-balance",
+  authenticateAdminToken,
+  async (req, res) => {
+    const id = "693cdf39ad2383899afb5906";
+    const startFromUTC = "2025-12-15T15:00:00.000Z";
+    try {
+      const bank = await BankList.findById(id);
+      if (!bank) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Bank not found",
+            zh: "找不到银行",
+          },
+        });
+      }
+      const startDate = new Date(startFromUTC);
+      const previousTransaction = await BankTransactionLog.findOne({
+        bankName: bank.bankname,
+        ownername: bank.ownername,
+        bankAccount: bank.bankaccount,
+        createdAt: { $lt: startDate },
+      }).sort({ createdAt: -1, _id: -1 });
+      let runningBalance = previousTransaction
+        ? previousTransaction.currentBalance
+        : bank.startingbalance;
+      const transactions = await BankTransactionLog.find({
+        bankName: bank.bankname,
+        ownername: bank.ownername,
+        bankAccount: bank.bankaccount,
+        createdAt: { $gte: startDate },
+      }).sort({ createdAt: 1, _id: 1 });
+      let updatedCount = 0;
+      for (const txn of transactions) {
+        const txnAmount = txn.amount || 0;
+        txn.lastBalance = runningBalance;
+        const type = txn.transactiontype.toLowerCase();
+        if (
+          type === "deposit" ||
+          type === "cashin" ||
+          type === "adjustin" ||
+          type === "adjust starting balance" ||
+          type === "reverted withdraw"
+        ) {
+          txn.currentBalance = runningBalance + txnAmount;
+        } else if (
+          type === "withdraw" ||
+          type === "cashout" ||
+          type === "transactionfee" ||
+          type === "adjustout" ||
+          type === "reverted deposit"
+        ) {
+          txn.currentBalance = runningBalance - txnAmount;
+        } else {
+          console.warn(`Unknown transaction type: ${type}, txn ID: ${txn._id}`);
+          txn.currentBalance = runningBalance;
+        }
+        runningBalance = txn.currentBalance;
+        await txn.save();
+        updatedCount++;
+      }
+      bank.currentbalance = runningBalance;
+      await bank.save();
+      res.status(200).json({
+        success: true,
+        message: {
+          en: `Recalculated ${updatedCount} transactions successfully`,
+          zh: `成功重新计算了 ${updatedCount} 笔交易`,
+        },
+        data: {
+          bankId: bank._id,
+          bankName: bank.bankname,
+          startFrom: startDate,
+          transactionsUpdated: updatedCount,
+          newCurrentBalance: runningBalance,
+        },
+      });
+    } catch (error) {
+      console.error("Error recalculating balance:", error);
       res.status(500).json({
         success: false,
         message: {
