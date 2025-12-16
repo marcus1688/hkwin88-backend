@@ -73,7 +73,6 @@ const adminListRouter = require("./routes/adminlist");
 const notificationRouter = require("./routes/notification");
 
 const slotJokerRouter = require("./routes/GAMEAPI/slotjoker");
-const slotLive22Router = require("./routes/GAMEAPI/slotlive22");
 
 const ALLGameFunctionRouter = require("./routes/GAMEAPI/0_GameFunction");
 const ALLGameStatusRouter = require("./routes/GAMEAPI/0_GameStatus");
@@ -745,7 +744,6 @@ app.use(adminListRouter);
 app.use(notificationRouter);
 
 app.use(slotJokerRouter);
-app.use(slotLive22Router);
 
 app.use(ALLGameFunctionRouter);
 app.use(ALLGameStatusRouter);
