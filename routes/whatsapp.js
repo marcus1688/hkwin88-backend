@@ -7,6 +7,46 @@ const axios = require("axios");
 const MESSAGEBIRD_API_KEY = process.env.MESSAGEBIRD_API_KEY;
 const CHANNEL_ID = process.env.CHANNEL_ID;
 
+// Check All Webhooks
+router.get("/api/webhooks", async (req, res) => {
+  try {
+    const response = await axios.get(
+      "https://conversations.messagebird.com/v1/webhooks",
+      {
+        headers: {
+          Authorization: `AccessKey ${MESSAGEBIRD_API_KEY}`,
+        },
+      }
+    );
+    res.json(response.data);
+  } catch (error) {
+    console.error("获取 Webhooks 失败:", error.response?.data || error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update Webhooks
+router.put("/api/webhook/update", async (req, res) => {
+  try {
+    const { webhookId, url } = req.body;
+    const response = await axios.patch(
+      `https://conversations.messagebird.com/v1/webhooks/${webhookId}`,
+      { url },
+      {
+        headers: {
+          Authorization: `AccessKey ${MESSAGEBIRD_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    res.json(response.data);
+  } catch (error) {
+    console.error("更新 Webhook 失败:", error.response?.data || error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get Conversations
 router.get("/api/conversations", async (req, res) => {
   try {
     const conversations = await Conversation.find().sort({ lastMessageAt: -1 });
