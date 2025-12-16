@@ -68,6 +68,7 @@ const AgentPTRouter = require("./routes/agentpt");
 const FreeCreditRouter = require("./routes/freecredit");
 const FacebookRouter = require("./routes/facebook");
 const GamelistRouter = require("./routes/gamelist");
+const whatsappRouter = require("./routes/whatsapp");
 
 const adminListRouter = require("./routes/adminlist");
 const notificationRouter = require("./routes/notification");
@@ -87,6 +88,8 @@ const Withdraw = require("./models/withdraw.model");
 const { User } = require("./models/users.model");
 const { adminUser, adminLog } = require("./models/adminuser.model");
 const { Mail } = require("./models/mail.model");
+const Message = require("./models/message.model");
+const Conversation = require("./models/conversation.model");
 const email = require("./models/email.model");
 const { updateKioskBalance } = require("./services/kioskBalanceService");
 const kioskbalance = require("./models/kioskbalance.model");
@@ -680,6 +683,49 @@ app.post("/admin/api/mails", authenticateAdminToken, async (req, res) => {
 
 mongoose.connect(process.env.MONGODB_URI);
 
+app.post("/webhook/whatsapp", async (req, res) => {
+  try {
+    const { type, message, conversation, contact } = req.body;
+    console.log("=== 收到 WhatsApp Webhook ===");
+    console.log("类型:", type);
+    if (type === "message.created" && message) {
+      await Conversation.findOneAndUpdate(
+        { conversationId: conversation.id },
+        {
+          conversationId: conversation.id,
+          contactId: contact.id,
+          contactPhone: message.from,
+          contactName: contact.displayName || "",
+          channelId: message.channelId,
+          status: conversation.status,
+          lastMessageAt: new Date(),
+          $inc: { unreadCount: message.direction === "received" ? 1 : 0 },
+        },
+        { upsert: true, new: true }
+      );
+      await Message.findOneAndUpdate(
+        { messageId: message.id },
+        {
+          messageId: message.id,
+          conversationId: conversation.id,
+          from: message.from,
+          to: message.to,
+          direction: message.direction,
+          type: message.type,
+          content: message.content,
+          status: message.status,
+        },
+        { upsert: true, new: true }
+      );
+      console.log("消息已保存:", message.content);
+    }
+    res.status(200).send("OK");
+  } catch (error) {
+    console.error("Webhook 错误:", error);
+    res.status(200).send("OK");
+  }
+});
+
 app.get("/", (req, res) => {
   res.status(403).send({
     error: "Access Forbidden",
@@ -739,6 +785,7 @@ app.use(FacebookRouter);
 app.use(GamelistRouter);
 app.use(AttendanceBonusRouter);
 app.use(LoyaltyBonusRouter);
+app.use(whatsappRouter);
 
 app.use(adminListRouter);
 app.use(notificationRouter);
