@@ -25,6 +25,31 @@ router.get("/api/webhooks", async (req, res) => {
   }
 });
 
+// Create New Webhook
+router.post("/api/webhook/create", async (req, res) => {
+  try {
+    const { url, channelId } = req.body;
+    const response = await axios.post(
+      "https://conversations.messagebird.com/v1/webhooks",
+      {
+        channelId: channelId || CHANNEL_ID,
+        url: url,
+        events: ["message.created", "message.updated"],
+      },
+      {
+        headers: {
+          Authorization: `AccessKey ${MESSAGEBIRD_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    res.json(response.data);
+  } catch (error) {
+    console.error("创建 Webhook 失败:", error.response?.data || error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Update Webhooks
 router.put("/api/webhook/update", async (req, res) => {
   try {
@@ -46,6 +71,25 @@ router.put("/api/webhook/update", async (req, res) => {
   }
 });
 
+// Delete Webhook
+router.delete("/api/webhook/:webhookId", async (req, res) => {
+  try {
+    const { webhookId } = req.params;
+    await axios.delete(
+      `https://conversations.messagebird.com/v1/webhooks/${webhookId}`,
+      {
+        headers: {
+          Authorization: `AccessKey ${MESSAGEBIRD_API_KEY}`,
+        },
+      }
+    );
+    res.json({ success: true, message: "Webhook deleted" });
+  } catch (error) {
+    console.error("删除 Webhook 失败:", error.response?.data || error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get Conversations
 router.get("/api/conversations", async (req, res) => {
   try {
@@ -56,6 +100,7 @@ router.get("/api/conversations", async (req, res) => {
   }
 });
 
+// Get All Conversations Message
 router.get("/api/conversations/:conversationId/messages", async (req, res) => {
   try {
     const { conversationId } = req.params;
@@ -69,6 +114,7 @@ router.get("/api/conversations/:conversationId/messages", async (req, res) => {
   }
 });
 
+// Send Message
 router.post("/api/conversations/:conversationId/send", async (req, res) => {
   try {
     const { conversationId } = req.params;

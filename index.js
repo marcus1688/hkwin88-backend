@@ -220,7 +220,8 @@ const globalLimiter = rateLimit({
   legacyHeaders: false,
   skipFailedRequests: false,
   skipSuccessfulRequests: false,
-  skip: (req, res) => req.path === "/health",
+  skip: (req, res) =>
+    req.path === "/health" || req.path === "/webhook/whatsapp",
   handler: (req, res, next, options) => {
     const clientIp = req.headers["x-forwarded-for"] || req.ip;
     const clientIpTrimmed = clientIp.split(",")[0].trim();
