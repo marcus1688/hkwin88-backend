@@ -4,8 +4,8 @@ const Conversation = require("../models/conversation.model");
 const Message = require("../models/message.model");
 const axios = require("axios");
 
-const MESSAGEBIRD_API_KEY = "VDRvACh2KKN3tEOueEbFFsUXC";
-const CHANNEL_ID = "2b7da680-be98-40af-be09-6becc728c55c";
+const MESSAGEBIRD_API_KEY = process.env.MESSAGEBIRD_API_KEY;
+const CHANNEL_ID = process.env.CHANNEL_ID;
 
 router.get("/api/conversations", async (req, res) => {
   try {
