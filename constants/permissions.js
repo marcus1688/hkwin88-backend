@@ -53,7 +53,7 @@ const modulePermissions = {
     permissions: [{ value: "bloglist", label: "Blog List" }],
   },
   hkwin88: {
-    label: "hkwin88",
+    label: "HKWIN88",
     permissions: [
       { value: "attendance", label: "Attendance" },
       { value: "loyalty", label: "Loyalty" },
