@@ -255,8 +255,7 @@ router.post(
   async (req, res) => {
     try {
       const { conversationId } = req.params;
-      const { imageUrl } = req.body;
-
+      const { imageUrl, caption } = req.body;
       const response = await axios.post(
         `https://conversations.messagebird.com/v1/conversations/${conversationId}/messages`,
         {
@@ -264,6 +263,7 @@ router.post(
           content: {
             image: {
               url: imageUrl,
+              caption: caption || "",
             },
           },
         },
@@ -274,7 +274,6 @@ router.post(
           },
         }
       );
-
       const messageData = response.data;
       await Message.findOneAndUpdate(
         { messageId: messageData.id },
@@ -285,23 +284,24 @@ router.post(
           to: messageData.to,
           direction: "sent",
           type: "image",
-          content: { image: { url: imageUrl } },
+          content: { image: { url: imageUrl, caption: caption || "" } },
           status: messageData.status,
         },
         { upsert: true, new: true }
       );
-
       await Conversation.findOneAndUpdate(
         { conversationId },
         {
           lastMessageAt: new Date(),
-          lastMessage: text,
+          lastMessage: caption ? `📷 ${caption}` : "📷 Image",
         }
       );
-
       res.json(response.data);
     } catch (error) {
-      console.error("发送图片失败:", error.response?.data || error.message);
+      console.error(
+        "Failed to send image:",
+        error.response?.data || error.message
+      );
       res.status(500).json({ error: error.message });
     }
   }
