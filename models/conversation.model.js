@@ -9,6 +9,7 @@ const conversationSchema = new mongoose.Schema(
     channelId: { type: String, required: true },
     status: { type: String, default: "active" },
     lastMessageAt: { type: Date, default: Date.now },
+    lastMessage: { type: String, default: "" },
     unreadCount: { type: Number, default: 0 },
   },
   { timestamps: true }

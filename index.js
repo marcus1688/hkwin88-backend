@@ -690,6 +690,8 @@ app.post("/webhook/whatsapp", async (req, res) => {
     console.log("=== 收到 WhatsApp Webhook ===");
     console.log("类型:", type);
     if (type === "message.created" && message) {
+      const lastMessageText =
+        message.type === "image" ? "📷 Image" : message.content?.text || "";
       await Conversation.findOneAndUpdate(
         { conversationId: conversation.id },
         {
@@ -700,6 +702,7 @@ app.post("/webhook/whatsapp", async (req, res) => {
           channelId: message.channelId,
           status: conversation.status,
           lastMessageAt: new Date(),
+          lastMessage: lastMessageText,
           $inc: { unreadCount: message.direction === "received" ? 1 : 0 },
         },
         { upsert: true, new: true }
