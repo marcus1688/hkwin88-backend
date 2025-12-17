@@ -60,6 +60,10 @@ const modulePermissions = {
       { value: "vipmonthlybonus", label: "VIP Monthly Bonus" },
     ],
   },
+  whatsapp: {
+    label: "WhatsApp",
+    permissions: [{ value: "whatsapp", label: "WhatsApp" }],
+  },
   mail: {
     label: "Mail",
     permissions: [{ value: "maillist", label: "Mail List" }],
