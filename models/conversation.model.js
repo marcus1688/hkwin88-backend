@@ -11,6 +11,8 @@ const conversationSchema = new mongoose.Schema(
     lastMessageAt: { type: Date, default: Date.now },
     lastMessage: { type: String, default: "" },
     unreadCount: { type: Number, default: 0 },
+    isPinned: { type: Boolean, default: false },
+    pinnedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

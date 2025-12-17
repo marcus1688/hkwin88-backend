@@ -130,8 +130,11 @@ router.get(
   authenticateAdminToken,
   async (req, res) => {
     try {
-      const conversations = await Conversation.find().sort({
-        lastMessageAt: -1,
+      const conversations = await Conversation.find().lean();
+      conversations.sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        return new Date(b.lastMessageAt) - new Date(a.lastMessageAt);
       });
       res.json(conversations);
     } catch (error) {
@@ -304,4 +307,41 @@ router.post(
   }
 );
 
+// Pin Message
+router.post(
+  "/admin/api/conversations/:conversationId/pin",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { conversationId } = req.params;
+      const conversation = await Conversation.findOneAndUpdate(
+        { conversationId },
+        { isPinned: true, pinnedAt: new Date() },
+        { new: true }
+      );
+      res.json({ success: true, conversation });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+// Unpin Message
+router.post(
+  "/admin/api/conversations/:conversationId/unpin",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { conversationId } = req.params;
+      const conversation = await Conversation.findOneAndUpdate(
+        { conversationId },
+        { isPinned: false, pinnedAt: null },
+        { new: true }
+      );
+      res.json({ success: true, conversation });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
 module.exports = router;
