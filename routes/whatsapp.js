@@ -344,4 +344,22 @@ router.post(
     }
   }
 );
+
+// Get My Account Info
+router.get(
+  "/admin/api/whatsapp/account",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      res.json({
+        name: process.env.WHATSAPP_ACCOUNT_NAME || "Customer Service",
+        phone: process.env.WHATSAPP_PHONE || "+852 7042 0016",
+        status: "active",
+        channelId: CHANNEL_ID,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
 module.exports = router;
