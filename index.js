@@ -1051,7 +1051,6 @@ const handleAutoReply = async (conversation, messageText) => {
     const phone = tempData.phone;
     const bankName = tempData.bankName;
 
-    // 注册用户
     const result = await registerUser({
       fullname,
       phone,
@@ -1074,30 +1073,48 @@ const handleAutoReply = async (conversation, messageText) => {
           `✅ 完成步驟後，請您提供截圖俾我哋，我哋會幫你查詢\n` +
           `✅ 免費活動多人申請，請老闆體諒耐心等候，我哋會盡快幫你處理，多謝😍`
       );
+      await updateConversation(conversation._id, {
+        step: "waiting_screenshot",
+        tempData: { fullname, phone, bankName, bankNumber },
+      });
     } else if (result.error === "duplicate_name") {
       await sendMessage(
         conversationId,
         `❌ 此名字已經註冊，請稍等客服會為您處理`
       );
+      await updateConversation(conversation._id, {
+        step: "waiting_agent",
+        tempData: { fullname, phone, bankName, bankNumber },
+        needsAgent: true,
+      });
     } else if (result.error === "duplicate_phone") {
       await sendMessage(
         conversationId,
         `❌ 此電話號碼已經註冊，請稍等客服會為您處理`
       );
+      await updateConversation(conversation._id, {
+        step: "waiting_agent",
+        tempData: { fullname, phone, bankName, bankNumber },
+        needsAgent: true,
+      });
     } else if (result.error === "duplicate_bank") {
       await sendMessage(
         conversationId,
         `❌ 此銀行號碼已經註冊，請稍等客服會為您處理`
       );
+      await updateConversation(conversation._id, {
+        step: "waiting_agent",
+        tempData: { fullname, phone, bankName, bankNumber },
+        needsAgent: true,
+      });
     } else {
       await sendMessage(conversationId, `❌ 註冊失敗，請稍等客服會為您處理`);
+      await updateConversation(conversation._id, {
+        step: "waiting_agent",
+        tempData: { fullname, phone, bankName, bankNumber },
+        needsAgent: true,
+      });
     }
-
-    await updateConversation(conversation._id, {
-      step: "waiting_agent",
-      tempData: { fullname, phone, bankName, bankNumber },
-      needsAgent: true,
-    });
     return;
   }
 
@@ -1172,7 +1189,6 @@ const handleAutoReply = async (conversation, messageText) => {
     const phone = tempData.phone;
     const bankName = tempData.bankName;
 
-    // 注册用户
     const result = await registerUser({
       fullname,
       phone,
@@ -1195,33 +1211,51 @@ const handleAutoReply = async (conversation, messageText) => {
           `✅ After done provide us screenshot\n` +
           `✅ 35 Free point many people apply, dear please hold on ya. We will assist you as soon as possible, thank you very much 😍`
       );
+      await updateConversation(conversation._id, {
+        step: "waiting_screenshot",
+        tempData: { fullname, phone, bankName, bankNumber },
+      });
     } else if (result.error === "duplicate_name") {
       await sendMessage(
         conversationId,
         `❌ This name is already registered, please wait for our customer service`
       );
+      await updateConversation(conversation._id, {
+        step: "waiting_agent",
+        tempData: { fullname, phone, bankName, bankNumber },
+        needsAgent: true,
+      });
     } else if (result.error === "duplicate_phone") {
       await sendMessage(
         conversationId,
         `❌ This phone number is already registered, please wait for our customer service`
       );
+      await updateConversation(conversation._id, {
+        step: "waiting_agent",
+        tempData: { fullname, phone, bankName, bankNumber },
+        needsAgent: true,
+      });
     } else if (result.error === "duplicate_bank") {
       await sendMessage(
         conversationId,
         `❌ This bank number is already registered, please wait for our customer service`
       );
+      await updateConversation(conversation._id, {
+        step: "waiting_agent",
+        tempData: { fullname, phone, bankName, bankNumber },
+        needsAgent: true,
+      });
     } else {
       await sendMessage(
         conversationId,
         `❌ Registration failed, please wait for our customer service`
       );
+      await updateConversation(conversation._id, {
+        step: "waiting_agent",
+        tempData: { fullname, phone, bankName, bankNumber },
+        needsAgent: true,
+      });
     }
-
-    await updateConversation(conversation._id, {
-      step: "waiting_agent",
-      tempData: { fullname, phone, bankName, bankNumber },
-      needsAgent: true,
-    });
     return;
   }
 };
@@ -1382,7 +1416,8 @@ app.post("/webhook/whatsapp", async (req, res) => {
       });
       const needsAgent =
         message.direction === "received" &&
-        existingConv?.step === "waiting_agent";
+        (existingConv?.step === "waiting_agent" ||
+          existingConv?.step === "waiting_screenshot");
       const conv = await Conversation.findOneAndUpdate(
         { conversationId: conversation.id },
         {
