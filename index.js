@@ -813,7 +813,7 @@ const handleAutoReply = async (conversation, messageText) => {
             `🆓 出款只可以出返俾以上您所提供嘅銀行賬號\n` +
             `🆓 禁止進行老虎機/打魚類型以外嘅遊戲\n` +
             `🆓 免費活動多人申請，請老闆體諒耐心等候，我哋會盡快幫你處理，多謝😍\n\n` +
-            `請提供你嘅英文全名：`
+            `⬇️ 請提供你嘅英文全名：`
         );
         await updateConversation(conversation._id, {
           step: "fc_fullname_zh",
@@ -837,7 +837,7 @@ const handleAutoReply = async (conversation, messageText) => {
             `🆓 Withdrawal can only be cash out to the bank account you provided above\n` +
             `🆓 Games beside than slot machine/fishing are not allowed\n` +
             `🆓 35 Free point many people apply, dear please hold on ya. We will assist you as soon as possible, thank you very much 😍\n\n` +
-            `Please provide your English full name:`
+            `⬇️ Please provide your English full name:`
         );
         await updateConversation(conversation._id, { step: "fc_fullname_en" });
       } else {
