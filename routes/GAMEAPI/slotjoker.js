@@ -316,6 +316,60 @@ async function registerJokerUser(user, rate) {
   }
 }
 
+// Internal Joker X2 Register
+router.post("/internal/jokerx2/register/:userId", async (req, res) => {
+  const internalKey = req.headers["x-internal-key"];
+  if (internalKey !== process.env.INTERNAL_API_KEY) {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
+
+  try {
+    const { userId } = req.params;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(200).json({
+        success: false,
+        message: {
+          en: "User not found.",
+          zh: "用戶未找到",
+        },
+      });
+    }
+
+    const registerResponse = await registerJokerUser(user, "2x");
+    if (!registerResponse.success) {
+      return res.status(200).json({
+        success: false,
+        message: {
+          en: "JOKER: Registration failed.",
+          zh: "JOKER: 註冊失敗",
+        },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: {
+        en: "JOKER: Account registered successfully.",
+        zh: "JOKER: 帳戶註冊成功",
+      },
+      gameAccount: {
+        gameID: `${gameAPPID}.${user.gameId}`,
+        gamePW: gamePassword,
+      },
+    });
+  } catch (error) {
+    console.log("JOKER X2 internal register error:", error.message);
+    return res.status(200).json({
+      success: false,
+      message: {
+        en: "JOKER: Registration failed due to technical issue.",
+        zh: "JOKER: 由於技術問題註冊失敗",
+      },
+    });
+  }
+});
+
 router.post(
   "/admin/api/jokerx2/register/:userId",
   authenticateAdminToken,
@@ -936,6 +990,60 @@ router.get(
     }
   }
 );
+
+// Internal Joker Register
+router.post("/internal/jokerx5/register/:userId", async (req, res) => {
+  const internalKey = req.headers["x-internal-key"];
+  if (internalKey !== process.env.INTERNAL_API_KEY) {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
+
+  try {
+    const { userId } = req.params;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(200).json({
+        success: false,
+        message: {
+          en: "User not found.",
+          zh: "用戶未找到",
+        },
+      });
+    }
+
+    const registerResponse = await registerJokerUser(user, "5x");
+    if (!registerResponse.success) {
+      return res.status(200).json({
+        success: false,
+        message: {
+          en: "JOKER: Registration failed.",
+          zh: "JOKER: 註冊失敗",
+        },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: {
+        en: "JOKER: Account registered successfully.",
+        zh: "JOKER: 帳戶註冊成功",
+      },
+      gameAccount: {
+        gameID: `${gameAPPID}.5${user.gameId}`,
+        gamePW: gamePassword,
+      },
+    });
+  } catch (error) {
+    console.log("JOKER internal register error:", error.message);
+    return res.status(200).json({
+      success: false,
+      message: {
+        en: "JOKER: Registration failed due to technical issue.",
+        zh: "JOKER: 由於技術問題註冊失敗",
+      },
+    });
+  }
+});
 
 // 5倍场function
 router.post(

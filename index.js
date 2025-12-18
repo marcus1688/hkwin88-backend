@@ -86,7 +86,10 @@ const cookie = require("cookie");
 const Deposits = require("./models/deposit.model");
 const Withdraw = require("./models/withdraw.model");
 const { User } = require("./models/users.model");
+const { general } = require("./models/general.model");
+const Promotion = require("./models/promotion.model");
 const { adminUser, adminLog } = require("./models/adminuser.model");
+const { addContactToGoogle } = require("./utils/googleContact");
 const { Mail } = require("./models/mail.model");
 const Message = require("./models/message.model");
 const Conversation = require("./models/conversation.model");
@@ -684,6 +687,542 @@ app.post("/admin/api/mails", authenticateAdminToken, async (req, res) => {
 
 mongoose.connect(process.env.MONGODB_URI);
 
+const registerUser = async ({
+  fullname,
+  phone,
+  bankName,
+  bankNumber,
+  freeCreditApply,
+  whatsappPhone,
+}) => {
+  try {
+    const formatPhone = (p) => {
+      const cleaned = String(p).replace(/\D/g, "");
+      return cleaned.length === 8 ? `852${cleaned}` : cleaned;
+    };
+    const providedPhone = formatPhone(phone);
+    const waPhone = formatPhone(whatsappPhone);
+    const phoneNumbers = [providedPhone];
+    if (waPhone && waPhone !== providedPhone) {
+      phoneNumbers.push(waPhone);
+    }
+    const bankAccounts =
+      bankName && bankNumber
+        ? [
+            {
+              name: fullname,
+              bankname: bankName,
+              banknumber: bankNumber,
+            },
+          ]
+        : [];
+    const response = await axios.post(
+      `${process.env.BASE_URL}internal/registeruser`,
+      { fullname, phoneNumbers, bankAccounts, freeCreditApply },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "x-internal-key": process.env.INTERNAL_API_KEY,
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Register error:", error.response?.data || error.message);
+    return { success: false };
+  }
+};
+
+const handleAutoReply = async (conversation, messageText) => {
+  const text = messageText.trim();
+  const textLower = text.toLowerCase();
+  const conversationId = conversation.conversationId;
+  const step = conversation.step;
+  const lang = conversation.language;
+
+  // ============ 新客户欢迎 ============
+  if (!step) {
+    await sendMessage(
+      conversationId,
+      `Welcome to HKWIN88❤️ 歡迎嚟到HKWIN88❤️\n\n` +
+        `1️⃣ 領取免費積分 Register Free Credit\n` +
+        `2️⃣ 註冊 & 存款 Register & Deposit\n` +
+        `3️⃣ 聯繫客服 Contact Our Customer Support`
+    );
+    await updateConversation(conversation._id, { step: "welcome" });
+    return;
+  }
+
+  // ============ 欢迎菜单选择 ============
+  if (step === "welcome") {
+    if (text === "1") {
+      await sendMessage(
+        conversationId,
+        `請選擇你嘅語言❤️\n` +
+          `Welcome Dear, Please select your language❤️\n\n` +
+          `1️⃣ 中文 Chinese\n` +
+          `2️⃣ English 英文`
+      );
+      await updateConversation(conversation._id, {
+        step: "select_language",
+        flowType: "free_credit",
+      });
+    } else if (text === "2") {
+      await sendMessage(
+        conversationId,
+        `請選擇你嘅語言❤️\n` +
+          `Welcome Dear, Please select your language❤️\n\n` +
+          `1️⃣ 中文 Chinese\n` +
+          `2️⃣ English 英文`
+      );
+      await updateConversation(conversation._id, {
+        step: "select_language",
+        flowType: "register",
+      });
+    } else if (text === "3") {
+      await sendMessage(
+        conversationId,
+        `請稍等，我哋嘅客服會馬上幫您處理❤️\n` +
+          `Please wait, our customer service will assist you shortly❤️`
+      );
+      await updateConversation(conversation._id, { step: "waiting_agent" });
+    } else {
+      await sendMessage(conversationId, `請回覆 1️⃣, 2️⃣ 或 3️⃣`);
+    }
+    return;
+  }
+
+  // ============ 选择语言 ============
+  if (step === "select_language") {
+    const flowType = conversation.flowType;
+
+    if (text === "1") {
+      await updateConversation(conversation._id, { language: "zh" });
+
+      if (flowType === "free_credit") {
+        await sendMessage(
+          conversationId,
+          `✅ 老闆您好，歡迎光顧HKWIN88香港總代理\n` +
+            `✅ 免費35積分只限於銀行賬號註冊\n\n` +
+            `🆓 免費35積分需打滿350積分可出$100\n` +
+            `🆓 出款只可以出返俾以上您所提供嘅銀行賬號\n` +
+            `🆓 禁止進行老虎機/打魚類型以外嘅遊戲\n` +
+            `🆓 免費活動多人申請，請老闆體諒耐心等候，我哋會盡快幫你處理，多謝😍\n\n` +
+            `請提供你嘅英文全名：`
+        );
+        await updateConversation(conversation._id, { step: "fc_fullname_zh" });
+      } else {
+        await sendMessage(conversationId, `請老闆提供你本人嘅英文全名~😘`);
+        await updateConversation(conversation._id, { step: "collect_name_zh" });
+      }
+    } else if (text === "2") {
+      await updateConversation(conversation._id, { language: "en" });
+
+      if (flowType === "free_credit") {
+        await sendMessage(
+          conversationId,
+          `✅ Hi Dear, Welcome to HKWIN88\n` +
+            `✅ 35 Free Point is only available for bank account registration\n\n` +
+            `🆓 35 Free point hit over 350 points save $100\n` +
+            `🆓 Withdrawal can only be cash out to the bank account you provided above\n` +
+            `🆓 Games beside than slot machine/fishing are not allowed\n` +
+            `🆓 35 Free point many people apply, dear please hold on ya. We will assist you as soon as possible, thank you very much 😍\n\n` +
+            `Please provide your English full name:`
+        );
+        await updateConversation(conversation._id, { step: "fc_fullname_en" });
+      } else {
+        await sendMessage(
+          conversationId,
+          `Dear please provide your full name ya😍`
+        );
+        await updateConversation(conversation._id, { step: "collect_name_en" });
+      }
+    } else {
+      await sendMessage(
+        conversationId,
+        `請回覆 1️⃣ 或 2️⃣\nPlease reply 1️⃣ or 2️⃣`
+      );
+    }
+    return;
+  }
+
+  // ============ 免费积分 - 收集全名（中文）============
+  if (step === "fc_fullname_zh") {
+    const fullname = text.trim();
+    if (fullname.length < 2) {
+      await sendMessage(conversationId, `請提供你嘅英文全名：`);
+      return;
+    }
+    await updateConversation(conversation._id, {
+      "tempData.fullname": fullname,
+    });
+    await sendMessage(conversationId, `請提供你嘅手機號碼：`);
+    await updateConversation(conversation._id, { step: "fc_phone_zh" });
+    return;
+  }
+
+  // ============ 免费积分 - 收集电话（中文）============
+  if (step === "fc_phone_zh") {
+    const phone = text.trim().replace(/\D/g, "");
+    if (phone.length < 8) {
+      await sendMessage(conversationId, `請提供正確嘅手機號碼：`);
+      return;
+    }
+    await updateConversation(conversation._id, { "tempData.phone": phone });
+    await sendMessage(
+      conversationId,
+      `請提供你嘅銀行名字（例如：HSBC、中銀）：`
+    );
+    await updateConversation(conversation._id, { step: "fc_bankname_zh" });
+    return;
+  }
+
+  // ============ 免费积分 - 收集银行名（中文）============
+  if (step === "fc_bankname_zh") {
+    const bankName = text.trim();
+    if (bankName.length < 2) {
+      await sendMessage(conversationId, `請提供你嘅銀行名字：`);
+      return;
+    }
+    await updateConversation(conversation._id, {
+      "tempData.bankName": bankName,
+    });
+    await sendMessage(conversationId, `請提供你嘅銀行賬號號碼：`);
+    await updateConversation(conversation._id, { step: "fc_banknumber_zh" });
+    return;
+  }
+
+  // ============ 免费积分 - 收集银行号码（中文）============
+  if (step === "fc_banknumber_zh") {
+    const bankNumber = text.trim().replace(/\D/g, "");
+    if (bankNumber.length < 6) {
+      await sendMessage(conversationId, `請提供正確嘅銀行賬號號碼：`);
+      return;
+    }
+
+    const tempData = conversation.tempData || {};
+    const fullname = tempData.fullname;
+    const phone = tempData.phone;
+    const bankName = tempData.bankName;
+
+    // 注册用户
+    const result = await registerUser({
+      fullname,
+      phone,
+      bankName,
+      bankNumber,
+      freeCreditApply: true,
+      whatsappPhone: conversation.contactPhone,
+    });
+
+    if (result.success) {
+      await sendMessage(
+        conversationId,
+        `✅ 註冊成功！\n\n` +
+          `老闆，請你根據以下指示完成分享步驟即可獲得免費35積分\n` +
+          `只需要2選1❤️\n\n` +
+          `1️⃣ 請你點擊以下鏈接進入我哋FB專頁進行點讚，並且分享最新帖子到10個唔同嘅Joker群組，需標記50好友\n` +
+          `鏈接：bit.ly/3bE49IL\n\n` +
+          `2️⃣ 請你點擊以下鏈接進入我哋TG群組，並且拉15位在線好友到群內\n` +
+          `鏈接：bit.ly/3QgznUt\n\n` +
+          `✅ 完成步驟後，請您提供截圖俾我哋，我哋會幫你查詢\n` +
+          `✅ 免費活動多人申請，請老闆體諒耐心等候，我哋會盡快幫你處理，多謝😍`
+      );
+    } else if (result.error === "duplicate_name") {
+      await sendMessage(
+        conversationId,
+        `❌ 此名字已經註冊，請稍等客服會為您處理`
+      );
+    } else if (result.error === "duplicate_phone") {
+      await sendMessage(
+        conversationId,
+        `❌ 此電話號碼已經註冊，請稍等客服會為您處理`
+      );
+    } else if (result.error === "duplicate_bank") {
+      await sendMessage(
+        conversationId,
+        `❌ 此銀行號碼已經註冊，請稍等客服會為您處理`
+      );
+    } else {
+      await sendMessage(conversationId, `❌ 註冊失敗，請稍等客服會為您處理`);
+    }
+
+    await updateConversation(conversation._id, {
+      step: "waiting_agent",
+      tempData: { fullname, phone, bankName, bankNumber },
+    });
+    return;
+  }
+
+  // ============ 免费积分 - 收集全名（英文）============
+  if (step === "fc_fullname_en") {
+    const fullname = text.trim();
+    if (fullname.length < 2) {
+      await sendMessage(
+        conversationId,
+        `Please provide your English full name:`
+      );
+      return;
+    }
+    await updateConversation(conversation._id, {
+      "tempData.fullname": fullname,
+    });
+    await sendMessage(
+      conversationId,
+      `Please provide your mobile phone number:`
+    );
+    await updateConversation(conversation._id, { step: "fc_phone_en" });
+    return;
+  }
+
+  // ============ 免费积分 - 收集电话（英文）============
+  if (step === "fc_phone_en") {
+    const phone = text.trim().replace(/\D/g, "");
+    if (phone.length < 8) {
+      await sendMessage(conversationId, `Please provide a valid phone number:`);
+      return;
+    }
+    await updateConversation(conversation._id, { "tempData.phone": phone });
+    await sendMessage(
+      conversationId,
+      `Please provide your bank name (e.g. HSBC, BOC):`
+    );
+    await updateConversation(conversation._id, { step: "fc_bankname_en" });
+    return;
+  }
+
+  // ============ 免费积分 - 收集银行名（英文）============
+  if (step === "fc_bankname_en") {
+    const bankName = text.trim();
+    if (bankName.length < 2) {
+      await sendMessage(conversationId, `Please provide your bank name:`);
+      return;
+    }
+    await updateConversation(conversation._id, {
+      "tempData.bankName": bankName,
+    });
+    await sendMessage(
+      conversationId,
+      `Please provide your bank account number:`
+    );
+    await updateConversation(conversation._id, { step: "fc_banknumber_en" });
+    return;
+  }
+
+  // ============ 免费积分 - 收集银行号码（英文）============
+  if (step === "fc_banknumber_en") {
+    const bankNumber = text.trim().replace(/\D/g, "");
+    if (bankNumber.length < 6) {
+      await sendMessage(
+        conversationId,
+        `Please provide a valid bank account number:`
+      );
+      return;
+    }
+
+    const tempData = conversation.tempData || {};
+    const fullname = tempData.fullname;
+    const phone = tempData.phone;
+    const bankName = tempData.bankName;
+
+    // 注册用户
+    const result = await registerUser({
+      fullname,
+      phone,
+      bankName,
+      bankNumber,
+      freeCreditApply: true,
+      whatsappPhone: conversation.contactPhone,
+    });
+
+    if (result.success) {
+      await sendMessage(
+        conversationId,
+        `✅ Registration successful!\n\n` +
+          `Dear, please complete the steps below to get 35 free point❤️\n` +
+          `Choose one option to finish❤️\n\n` +
+          `1️⃣ Please click the link below to our FB page, like our FB page, and share our latest post to 10 different Joker groups\n` +
+          `Link: bit.ly/3bE49IL\n\n` +
+          `2️⃣ Please click the link below to our TG Group, and invite 15 active friends to our group\n` +
+          `Link: bit.ly/3QgznUt\n\n` +
+          `✅ After done provide us screenshot\n` +
+          `✅ 35 Free point many people apply, dear please hold on ya. We will assist you as soon as possible, thank you very much 😍`
+      );
+    } else if (result.error === "duplicate_name") {
+      await sendMessage(
+        conversationId,
+        `❌ This name is already registered, please wait for our customer service`
+      );
+    } else if (result.error === "duplicate_phone") {
+      await sendMessage(
+        conversationId,
+        `❌ This phone number is already registered, please wait for our customer service`
+      );
+    } else if (result.error === "duplicate_bank") {
+      await sendMessage(
+        conversationId,
+        `❌ This bank number is already registered, please wait for our customer service`
+      );
+    } else {
+      await sendMessage(
+        conversationId,
+        `❌ Registration failed, please wait for our customer service`
+      );
+    }
+
+    await updateConversation(conversation._id, {
+      step: "waiting_agent",
+      tempData: { fullname, phone, bankName, bankNumber },
+    });
+    return;
+  }
+};
+
+// ============ Helper Functions ============
+
+const sendMessage = async (conversationId, text) => {
+  try {
+    await axios.post(
+      `https://conversations.messagebird.com/v1/conversations/${conversationId}/messages`,
+      { type: "text", content: { text } },
+      {
+        headers: {
+          Authorization: `AccessKey ${process.env.MESSAGEBIRD_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+  } catch (error) {
+    console.error(
+      "Send message failed:",
+      error.response?.data || error.message
+    );
+  }
+};
+
+const updateConversation = async (id, data) => {
+  await Conversation.findByIdAndUpdate(id, data);
+};
+
+// 解析用户输入的资料
+const parseUserInfo = (text) => {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l);
+  const result = {
+    fullname: null,
+    phone: null,
+    bankName: null,
+    bankNumber: null,
+  };
+
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+
+    // 尝试匹配格式 "英文全名：xxx" 或 "Full name: xxx"
+    if (lower.includes("全名") || lower.includes("name")) {
+      result.fullname = line.split(/[：:]/)[1]?.trim();
+    } else if (
+      lower.includes("手機") ||
+      lower.includes("phone") ||
+      lower.includes("mobile")
+    ) {
+      result.phone = line.split(/[：:]/)[1]?.trim()?.replace(/\D/g, "");
+    } else if (lower.includes("銀行名") || lower.includes("bank name")) {
+      result.bankName = line.split(/[：:]/)[1]?.trim();
+    } else if (
+      lower.includes("銀行號") ||
+      lower.includes("bank number") ||
+      lower.includes("account")
+    ) {
+      result.bankNumber = line.split(/[：:]/)[1]?.trim()?.replace(/\D/g, "");
+    }
+  }
+
+  // 如果没有标签，按顺序解析
+  if (!result.fullname && lines.length >= 4) {
+    result.fullname = lines[0];
+    result.phone = lines[1]?.replace(/\D/g, "");
+    result.bankName = lines[2];
+    result.bankNumber = lines[3]?.replace(/\D/g, "");
+  }
+
+  return result;
+};
+
+// 检查重复（中文）
+const checkDuplicate = async (fullname, phone, bankNumber) => {
+  const normalizedFullname = fullname.toLowerCase().replace(/\s+/g, "");
+
+  const existingName = await User.findOne({
+    fullname: new RegExp(`^${normalizedFullname}$`, "i"),
+  });
+  if (existingName) return "此名字已經註冊";
+
+  const existingPhone = await User.findOne({
+    $or: [{ phonenumber: phone }, { phoneNumbers: phone }],
+  });
+  if (existingPhone) return "此電話號碼已經註冊";
+
+  const existingBank = await User.findOne({
+    "bankAccounts.accountNumber": bankNumber,
+  });
+  if (existingBank) return "此銀行號碼已經註冊";
+
+  return null;
+};
+
+// 检查重复（英文）
+const checkDuplicateEN = async (fullname, phone, bankNumber) => {
+  const normalizedFullname = fullname.toLowerCase().replace(/\s+/g, "");
+
+  const existingName = await User.findOne({
+    fullname: new RegExp(`^${normalizedFullname}$`, "i"),
+  });
+  if (existingName) return "This name is already registered";
+
+  const existingPhone = await User.findOne({
+    $or: [{ phonenumber: phone }, { phoneNumbers: phone }],
+  });
+  if (existingPhone) return "This phone number is already registered";
+
+  const existingBank = await User.findOne({
+    "bankAccounts.accountNumber": bankNumber,
+  });
+  if (existingBank) return "This bank number is already registered";
+
+  return null;
+};
+
+// 检查名字重复
+const checkDuplicateName = async (fullname) => {
+  const normalizedFullname = fullname.toLowerCase().replace(/\s+/g, "");
+  const existing = await User.findOne({
+    fullname: new RegExp(`^${normalizedFullname}$`, "i"),
+  });
+  return !!existing;
+};
+
+module.exports = { handleAutoReply };
+
+const sendWhatsAppMessage = async (conversationId, text) => {
+  await axios.post(
+    `https://conversations.messagebird.com/v1/conversations/${conversationId}/messages`,
+    { type: "text", content: { text } },
+    {
+      headers: {
+        Authorization: `AccessKey ${process.env.MESSAGEBIRD_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+};
+
+const updateStep = async (id, step) => {
+  await Conversation.findByIdAndUpdate(id, { "customer.step": step });
+};
+
 app.post("/webhook/whatsapp", async (req, res) => {
   try {
     const { type, message, conversation, contact } = req.body;
@@ -692,7 +1231,7 @@ app.post("/webhook/whatsapp", async (req, res) => {
     if (type === "message.created" && message) {
       const lastMessageText =
         message.type === "image" ? "📷 Image" : message.content?.text || "";
-      await Conversation.findOneAndUpdate(
+      const conv = await Conversation.findOneAndUpdate(
         { conversationId: conversation.id },
         {
           conversationId: conversation.id,
@@ -722,6 +1261,9 @@ app.post("/webhook/whatsapp", async (req, res) => {
         { upsert: true, new: true }
       );
       console.log("消息已保存:", message.content);
+      if (message.direction === "received" && message.type === "text") {
+        await handleAutoReply(conv, message.content?.text || "");
+      }
     }
     res.status(200).send("OK");
   } catch (error) {

@@ -2877,6 +2877,272 @@ router.get("/admin/api/allusers", authenticateAdminToken, async (req, res) => {
   }
 });
 
+// WhatsApp Internal Register User
+router.post("/internal/registeruser", async (req, res) => {
+  const internalKey = req.headers["x-internal-key"];
+  if (internalKey !== process.env.INTERNAL_API_KEY) {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
+  const {
+    fullname,
+    phoneNumbers = [],
+    bankAccounts = [],
+    referralCode,
+    freeCreditApply,
+  } = req.body;
+
+  if (!fullname || !phoneNumbers.length) {
+    return res.status(200).json({
+      success: false,
+      message: {
+        en: "All fields are required",
+        zh: "所有字段都是必填的",
+      },
+    });
+  }
+
+  const normalizedUsername = fullname.toLowerCase().replace(/\s+/g, "");
+  const normalizedFullname = fullname.toLowerCase().replace(/\s+/g, "");
+  const formattedPhoneNumbers = phoneNumbers.map((phone) => {
+    const phoneStr = String(phone);
+    if (phoneStr.length === 8) {
+      return `852${phoneStr}`;
+    }
+    return phoneStr;
+  });
+  const primaryPhone = formattedPhoneNumbers[0];
+
+  try {
+    const existingUser = await User.findOne({
+      $or: [{ fullname: new RegExp(`^${normalizedFullname}$`, "i") }],
+    });
+    if (existingUser) {
+      return res.status(200).json({
+        success: false,
+        error: "duplicate_name",
+        message: {
+          en: "Duplicate User",
+          zh: "用戶已存在",
+        },
+      });
+    }
+
+    const existingPhoneNumber = await User.findOne({
+      $or: [
+        { phonenumber: { $in: formattedPhoneNumbers } },
+        { phoneNumbers: { $in: formattedPhoneNumbers } },
+      ],
+    });
+    if (existingPhoneNumber) {
+      return res.status(200).json({
+        success: false,
+        error: "duplicate_phone",
+        message: {
+          en: "Duplicate Phone Number",
+          zh: "電話號碼已存在",
+        },
+      });
+    }
+
+    if (bankAccounts.length > 0 && bankAccounts[0].banknumber) {
+      const existingBank = await User.findOne({
+        "bankAccounts.banknumber": bankAccounts[0].banknumber,
+      });
+      if (existingBank) {
+        return res.status(200).json({
+          success: false,
+          error: "duplicate_bank",
+          message: {
+            en: "Duplicate Bank Number",
+            zh: "銀行號碼已存在",
+          },
+        });
+      }
+    }
+
+    const generalSettings = await general.findOneAndUpdate(
+      {},
+      { $inc: { userIdCounter: 1 } },
+      { sort: { createdAt: -1 }, new: true }
+    );
+    if (!generalSettings) {
+      return res.status(200).json({
+        success: false,
+        message: {
+          en: "System not configured.",
+          zh: "系統未配置",
+        },
+      });
+    }
+    const newUserId = generalSettings.userIdCounter;
+
+    const password = Math.random().toString(36).slice(-8);
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const newReferralCode = await generateUniqueReferralCode();
+    const referralLink = generateReferralLink(newReferralCode);
+    const referralQrCode = await generateQRWithLogo(referralLink);
+
+    let referralBy = null;
+    if (referralCode) {
+      const referrer = await User.findOne({ referralCode: referralCode });
+      if (referrer) {
+        referralBy = {
+          user_id: referrer._id,
+          username: referrer.username,
+        };
+      }
+    }
+
+    const newUser = await User.create({
+      userid: newUserId,
+      username: normalizedUsername,
+      fullname: normalizedFullname,
+      password: hashedPassword,
+      phonenumber: primaryPhone,
+      phoneNumbers: formattedPhoneNumbers,
+      bankAccounts,
+      registerIp: "whatsapp register",
+      referralLink,
+      referralCode: newReferralCode,
+      referralQrCode,
+      viplevel: null,
+      gameId: await generateUniqueGameId(),
+      referralBy,
+    });
+
+    addContactToGoogle(newUserId, fullname, formattedPhoneNumbers, "");
+
+    if (referralBy) {
+      await User.findByIdAndUpdate(referralBy.user_id, {
+        $push: {
+          referrals: {
+            user_id: newUser._id,
+            username: newUser.username,
+          },
+        },
+      });
+    }
+
+    // 注册游戏平台（不需要 Authorization）
+    const kiosks = await Kiosk.find({
+      isActive: true,
+      registerGameAPI: { $exists: true, $ne: "" },
+    });
+    const API_URL = process.env.API_URL || "http://localhost:3001/api/";
+
+    for (const kiosk of kiosks) {
+      try {
+        const url = `${process.env.BASE_URL}internal/${kiosk.registerGameAPI}/${newUser._id}`;
+        await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-internal-key": process.env.INTERNAL_API_KEY,
+          },
+          body: JSON.stringify({}),
+        });
+      } catch (error) {
+        console.error(`[Register] ${kiosk.name} error:`, error.message);
+      }
+    }
+
+    // 免费积分
+    if (freeCreditApply) {
+      try {
+        const selectedKiosk = await Kiosk.findOne({ name: /joker x2/i });
+        const freeCreditPromotion = await Promotion.findOne({
+          $or: [
+            { maintitleEN: { $regex: /Free Credit/i } },
+            { maintitle: { $regex: /免费积分/ } },
+          ],
+        });
+
+        if (selectedKiosk && freeCreditPromotion) {
+          const bonusAmount = Number(freeCreditPromotion.bonusexact);
+          const transferAmount = bonusAmount / 2;
+
+          const transferUrl = `${API_URL}${selectedKiosk.transferInAPI}/${newUser._id}`;
+          const transferResponse = await fetch(transferUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transferAmount }),
+          });
+          const transferResult = await transferResponse.json();
+
+          if (transferResult.success) {
+            const transactionId = uuidv4();
+
+            const newBonus = new Bonus({
+              transactionId,
+              userId: newUser._id,
+              userid: newUser.userid,
+              username: newUser.username,
+              fullname: newUser.fullname,
+              transactionType: "bonus",
+              processBy: "whatsapp",
+              amount: bonusAmount,
+              walletamount: 0,
+              status: "approved",
+              method: "whatsapp",
+              remark: "Free Credit Apply",
+              game: selectedKiosk.name,
+              promotionname: freeCreditPromotion.maintitle,
+              promotionnameEN: freeCreditPromotion.maintitleEN,
+              promotionId: freeCreditPromotion._id,
+              processtime: "0s",
+            });
+            await newBonus.save();
+
+            await User.findByIdAndUpdate(newUser._id, {
+              $inc: { totalbonus: bonusAmount },
+            });
+
+            const walletLog = new UserWalletLog({
+              userId: newUser._id,
+              transactionid: transactionId,
+              transactiontime: new Date(),
+              transactiontype: "bonus",
+              amount: bonusAmount,
+              status: "approved",
+              remark: "Free Credit Apply",
+              game: selectedKiosk.name,
+              promotionnameCN: freeCreditPromotion.maintitle,
+              promotionnameEN: freeCreditPromotion.maintitleEN,
+            });
+            await walletLog.save();
+          }
+        }
+      } catch (error) {
+        console.error("Free Credit Apply error:", error.message);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: {
+        en: "User created successfully",
+        zh: "用戶創建成功",
+      },
+      data: {
+        userid: newUserId,
+        username: newUser.username,
+        password: password,
+      },
+    });
+  } catch (error) {
+    console.error("Error occurred while creating user:", error);
+    res.status(500).json({
+      success: false,
+      message: {
+        en: "Internal server error",
+        zh: "伺服器內部錯誤",
+      },
+    });
+  }
+});
+
 // Admin Register User
 router.post(
   "/admin/api/registeruser",
