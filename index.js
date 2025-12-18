@@ -749,7 +749,9 @@ const handleAutoReply = async (conversation, messageText) => {
         `2️⃣ 註冊 & 存款 Register & Deposit\n` +
         `3️⃣ 聯繫客服 Contact Our Customer Support`
     );
-    await updateConversation(conversation._id, { step: "welcome" });
+    await updateConversation(conversation._id, {
+      step: "welcome",
+    });
     return;
   }
 
@@ -785,7 +787,10 @@ const handleAutoReply = async (conversation, messageText) => {
         `請稍等，我哋嘅客服會馬上幫您處理❤️\n` +
           `Please wait, our customer service will assist you shortly❤️`
       );
-      await updateConversation(conversation._id, { step: "waiting_agent" });
+      await updateConversation(conversation._id, {
+        step: "waiting_agent",
+        needsAgent: true,
+      });
     } else {
       await sendMessage(conversationId, `請回覆 1️⃣, 2️⃣ 或 3️⃣`);
     }
@@ -810,10 +815,15 @@ const handleAutoReply = async (conversation, messageText) => {
             `🆓 免費活動多人申請，請老闆體諒耐心等候，我哋會盡快幫你處理，多謝😍\n\n` +
             `請提供你嘅英文全名：`
         );
-        await updateConversation(conversation._id, { step: "fc_fullname_zh" });
+        await updateConversation(conversation._id, {
+          step: "fc_fullname_zh",
+        });
       } else {
+        // 注册 & 存款流程
         await sendMessage(conversationId, `請老闆提供你本人嘅英文全名~😘`);
-        await updateConversation(conversation._id, { step: "collect_name_zh" });
+        await updateConversation(conversation._id, {
+          step: "reg_fullname_zh",
+        });
       }
     } else if (text === "2") {
       await updateConversation(conversation._id, { language: "en" });
@@ -831,11 +841,12 @@ const handleAutoReply = async (conversation, messageText) => {
         );
         await updateConversation(conversation._id, { step: "fc_fullname_en" });
       } else {
+        // 注册 & 存款流程
         await sendMessage(
           conversationId,
           `Dear please provide your full name ya😍`
         );
-        await updateConversation(conversation._id, { step: "collect_name_en" });
+        await updateConversation(conversation._id, { step: "reg_fullname_en" });
       }
     } else {
       await sendMessage(
@@ -843,6 +854,141 @@ const handleAutoReply = async (conversation, messageText) => {
         `請回覆 1️⃣ 或 2️⃣\nPlease reply 1️⃣ or 2️⃣`
       );
     }
+    return;
+  }
+
+  // ============ 注册存款 - 收集全名（中文）============
+  if (step === "reg_fullname_zh") {
+    const fullname = text.trim();
+    if (fullname.length < 2) {
+      await sendMessage(conversationId, `請提供你嘅英文全名~😘`);
+      return;
+    }
+    await updateConversation(conversation._id, {
+      "tempData.fullname": fullname,
+    });
+    await sendMessage(conversationId, `請提供你嘅手機號碼：`);
+    await updateConversation(conversation._id, { step: "reg_phone_zh" });
+    return;
+  }
+
+  // ============ 注册存款 - 收集电话（中文）============
+  if (step === "reg_phone_zh") {
+    const phone = text.trim().replace(/\D/g, "");
+    if (phone.length < 8) {
+      await sendMessage(conversationId, `請提供正確嘅手機號碼：`);
+      return;
+    }
+
+    const tempData = conversation.tempData || {};
+    const fullname = tempData.fullname;
+
+    // 注册用户
+    const result = await registerUser({
+      fullname,
+      phone,
+      freeCreditApply: false,
+      whatsappPhone: conversation.contactPhone,
+    });
+
+    if (result.success) {
+      await sendMessage(
+        conversationId,
+        `✅ 註冊成功！\n\n` +
+          `⚠️ 溫馨提示：存款同提款必須使用同一個銀行戶口名，如果使用朋友名字存款，提款時只可以出返俾您嘅朋友 ⚠️\n\n` +
+          `請稍等，客服會發存款資料俾您❤️`
+      );
+    } else if (result.error === "duplicate_name") {
+      await sendMessage(
+        conversationId,
+        `❌ 此名字已經註冊，請稍等客服會為您處理`
+      );
+    } else if (result.error === "duplicate_phone") {
+      await sendMessage(
+        conversationId,
+        `❌ 此電話號碼已經註冊，請稍等客服會為您處理`
+      );
+    } else {
+      await sendMessage(conversationId, `❌ 註冊失敗，請稍等客服會為您處理`);
+    }
+
+    await updateConversation(conversation._id, {
+      step: "waiting_agent",
+      tempData: { fullname, phone },
+      needsAgent: true,
+    });
+    return;
+  }
+
+  // ============ 注册存款 - 收集全名（英文）============
+  if (step === "reg_fullname_en") {
+    const fullname = text.trim();
+    if (fullname.length < 2) {
+      await sendMessage(
+        conversationId,
+        `Dear please provide your full name ya😍`
+      );
+      return;
+    }
+    await updateConversation(conversation._id, {
+      "tempData.fullname": fullname,
+    });
+    await sendMessage(
+      conversationId,
+      `Please provide your mobile phone number:`
+    );
+    await updateConversation(conversation._id, { step: "reg_phone_en" });
+    return;
+  }
+
+  // ============ 注册存款 - 收集电话（英文）============
+  if (step === "reg_phone_en") {
+    const phone = text.trim().replace(/\D/g, "");
+    if (phone.length < 8) {
+      await sendMessage(conversationId, `Please provide a valid phone number:`);
+      return;
+    }
+
+    const tempData = conversation.tempData || {};
+    const fullname = tempData.fullname;
+
+    // 注册用户
+    const result = await registerUser({
+      fullname,
+      phone,
+      freeCreditApply: false,
+      whatsappPhone: conversation.contactPhone,
+    });
+
+    if (result.success) {
+      await sendMessage(
+        conversationId,
+        `✅ Registration successful!\n\n` +
+          `⚠️ Reminder: Deposit and withdrawal must use the same bank account name. If using a friend's name to deposit, withdrawal can only be made to your friend's account ⚠️\n\n` +
+          `Please wait, our customer service will send you the deposit details❤️`
+      );
+    } else if (result.error === "duplicate_name") {
+      await sendMessage(
+        conversationId,
+        `❌ This name is already registered, please wait for our customer service`
+      );
+    } else if (result.error === "duplicate_phone") {
+      await sendMessage(
+        conversationId,
+        `❌ This phone number is already registered, please wait for our customer service`
+      );
+    } else {
+      await sendMessage(
+        conversationId,
+        `❌ Registration failed, please wait for our customer service`
+      );
+    }
+
+    await updateConversation(conversation._id, {
+      step: "waiting_agent",
+      tempData: { fullname, phone },
+      needsAgent: true,
+    });
     return;
   }
 
@@ -950,6 +1096,7 @@ const handleAutoReply = async (conversation, messageText) => {
     await updateConversation(conversation._id, {
       step: "waiting_agent",
       tempData: { fullname, phone, bankName, bankNumber },
+      needsAgent: true,
     });
     return;
   }
@@ -1073,6 +1220,7 @@ const handleAutoReply = async (conversation, messageText) => {
     await updateConversation(conversation._id, {
       step: "waiting_agent",
       tempData: { fullname, phone, bankName, bankNumber },
+      needsAgent: true,
     });
     return;
   }
@@ -1226,11 +1374,15 @@ const updateStep = async (id, step) => {
 app.post("/webhook/whatsapp", async (req, res) => {
   try {
     const { type, message, conversation, contact } = req.body;
-    console.log("=== 收到 WhatsApp Webhook ===");
-    console.log("类型:", type);
     if (type === "message.created" && message) {
       const lastMessageText =
         message.type === "image" ? "📷 Image" : message.content?.text || "";
+      const existingConv = await Conversation.findOne({
+        conversationId: conversation.id,
+      });
+      const needsAgent =
+        message.direction === "received" &&
+        existingConv?.step === "waiting_agent";
       const conv = await Conversation.findOneAndUpdate(
         { conversationId: conversation.id },
         {
@@ -1243,6 +1395,7 @@ app.post("/webhook/whatsapp", async (req, res) => {
           lastMessageAt: new Date(),
           lastMessage: lastMessageText,
           $inc: { unreadCount: message.direction === "received" ? 1 : 0 },
+          ...(needsAgent && { needsAgent: true }),
         },
         { upsert: true, new: true }
       );
@@ -1260,7 +1413,6 @@ app.post("/webhook/whatsapp", async (req, res) => {
         },
         { upsert: true, new: true }
       );
-      console.log("消息已保存:", message.content);
       if (message.direction === "received" && message.type === "text") {
         await handleAutoReply(conv, message.content?.text || "");
       }

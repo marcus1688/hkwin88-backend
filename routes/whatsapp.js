@@ -208,6 +208,7 @@ router.post(
         {
           lastMessageAt: new Date(),
           lastMessage: text,
+          needsAgent: false,
         }
       );
 
@@ -294,6 +295,7 @@ router.post(
         {
           lastMessageAt: new Date(),
           lastMessage: caption ? `📷 ${caption}` : "📷 Image",
+          needsAgent: false,
         }
       );
       res.json(response.data);
@@ -357,6 +359,47 @@ router.get(
         status: "active",
         channelId: CHANNEL_ID,
       });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+// Skip Bot Flow
+router.post(
+  "/admin/api/conversations/:conversationId/skip-bot",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { conversationId } = req.params;
+      const conversation = await Conversation.findOneAndUpdate(
+        { conversationId },
+        {
+          step: "waiting_agent",
+          needsAgent: true,
+        },
+        { new: true }
+      );
+      res.json({ success: true, conversation });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+// Mark as Replied
+router.post(
+  "/admin/api/conversations/:conversationId/mark-replied",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { conversationId } = req.params;
+      const conversation = await Conversation.findOneAndUpdate(
+        { conversationId },
+        { needsAgent: false },
+        { new: true }
+      );
+      res.json({ success: true, conversation });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

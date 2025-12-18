@@ -24,6 +24,7 @@ const conversationSchema = new mongoose.Schema(
     language: { type: String, default: null },
     flowType: { type: String, default: null },
     tempData: { type: mongoose.Schema.Types.Mixed, default: {} },
+    needsAgent: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
