@@ -1057,7 +1057,7 @@ const handleAutoReply = async (conversation, messageText) => {
       phone,
       bankName,
       bankNumber,
-      freeCreditApply: true,
+      freeCreditApply: false,
       whatsappPhone: conversation.contactPhone,
     });
 
@@ -1178,7 +1178,7 @@ const handleAutoReply = async (conversation, messageText) => {
       phone,
       bankName,
       bankNumber,
-      freeCreditApply: true,
+      freeCreditApply: false,
       whatsappPhone: conversation.contactPhone,
     });
 
