@@ -763,7 +763,7 @@ const handleAutoReply = async (conversation, messageText) => {
         `請選擇你嘅語言❤️\n` +
           `Welcome Dear, Please select your language❤️\n\n` +
           `1️⃣ 中文 Chinese\n` +
-          `2️⃣ English 英文`
+          `2️⃣ 英文 English`
       );
       await updateConversation(conversation._id, {
         step: "select_language",
@@ -775,7 +775,7 @@ const handleAutoReply = async (conversation, messageText) => {
         `請選擇你嘅語言❤️\n` +
           `Welcome Dear, Please select your language❤️\n\n` +
           `1️⃣ 中文 Chinese\n` +
-          `2️⃣ English 英文`
+          `2️⃣ 英文 English `
       );
       await updateConversation(conversation._id, {
         step: "select_language",

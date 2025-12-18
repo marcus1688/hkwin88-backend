@@ -354,7 +354,7 @@ router.get(
   async (req, res) => {
     try {
       res.json({
-        name: process.env.WHATSAPP_ACCOUNT_NAME || "Customer Service",
+        name: process.env.WHATSAPP_ACCOUNT_NAME || "HKWIN88 Customer Service",
         phone: process.env.WHATSAPP_PHONE || "+852 7042 0016",
         status: "active",
         channelId: CHANNEL_ID,
