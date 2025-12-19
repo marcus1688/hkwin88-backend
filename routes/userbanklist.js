@@ -44,6 +44,8 @@ router.post(
   async (req, res) => {
     try {
       const { bankname, bankcode, remark } = req.body;
+      let logo = null;
+
       if (req.file) {
         const folderPath = "userbanklists/";
         const fileKey = `${folderPath}${Date.now()}_${req.file.originalname}`;
@@ -56,12 +58,14 @@ router.post(
         await s3Client.send(putObjectCommand);
         logo = `https://${process.env.S3_MAINBUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileKey}`;
       }
+
       const newBankList = await UserBankList.create({
         bankname,
         bankcode,
         remark,
         logo,
       });
+
       res.status(200).json({
         success: true,
         message: {
