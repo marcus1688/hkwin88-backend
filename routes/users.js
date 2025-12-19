@@ -5455,6 +5455,16 @@ router.post(
         });
       }
 
+      if (!user.status) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User account is suspended",
+            zh: "用户账户已被封锁",
+          },
+        });
+      }
+
       if (fromWallet) {
         if (Number(user.wallet) < kioskDepositAmount) {
           return res.status(200).json({
@@ -5694,6 +5704,16 @@ router.post(
           message: {
             en: "User not found",
             zh: "找不到用户",
+          },
+        });
+      }
+
+      if (!user.status) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User account is suspended",
+            zh: "用户账户已被封锁",
           },
         });
       }
@@ -5977,6 +5997,15 @@ router.post(
           message: {
             en: "User not found",
             zh: "找不到用户",
+          },
+        });
+      }
+      if (!user.status) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User account is suspended",
+            zh: "用户账户已被封锁",
           },
         });
       }
