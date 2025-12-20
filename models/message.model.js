@@ -10,6 +10,12 @@ const messageSchema = new mongoose.Schema(
     type: { type: String, default: "text" },
     content: { type: mongoose.Schema.Types.Mixed, required: true },
     status: { type: String, default: "received" },
+    replyTo: {
+      messageId: { type: String, default: null },
+      content: { type: mongoose.Schema.Types.Mixed, default: null },
+      type: { type: String, default: null },
+      from: { type: String, default: null },
+    },
   },
   { timestamps: true }
 );

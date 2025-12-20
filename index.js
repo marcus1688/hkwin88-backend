@@ -1539,6 +1539,29 @@ app.post("/webhook/whatsapp", async (req, res) => {
         message.direction === "received" &&
         (existingConv?.step === "waiting_agent" ||
           existingConv?.step === "waiting_screenshot");
+
+      let replyToData = null;
+      if (message.replyTo?.id) {
+        const quotedMessage = await Message.findOne({
+          messageId: message.replyTo.id,
+        });
+        if (quotedMessage) {
+          replyToData = {
+            messageId: message.replyTo.id,
+            content: quotedMessage.content,
+            type: quotedMessage.type,
+            from: quotedMessage.from,
+          };
+        } else {
+          replyToData = {
+            messageId: message.replyTo.id,
+            content: null,
+            type: null,
+            from: null,
+          };
+        }
+      }
+
       const conv = await Conversation.findOneAndUpdate(
         { conversationId: conversation.id },
         {
@@ -1555,6 +1578,7 @@ app.post("/webhook/whatsapp", async (req, res) => {
         },
         { upsert: true, new: true }
       );
+
       await Message.findOneAndUpdate(
         { messageId: message.id },
         {
@@ -1566,9 +1590,11 @@ app.post("/webhook/whatsapp", async (req, res) => {
           type: message.type,
           content: message.content,
           status: message.status,
+          replyTo: replyToData,
         },
         { upsert: true, new: true }
       );
+
       if (message.direction === "received" && message.type === "text") {
         await handleAutoReply(conv, message.content?.text || "");
       }
