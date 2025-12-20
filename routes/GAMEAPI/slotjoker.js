@@ -489,6 +489,67 @@ router.post(
   }
 );
 
+// Internal Transfer In - Joker X2
+router.post("/internal/jokerx2/deposit/:userId", async (req, res) => {
+  const internalKey = req.headers["x-internal-key"];
+  if (internalKey !== process.env.INTERNAL_API_KEY) {
+    return res.status(401).json({ success: false, error: "unauthorized" });
+  }
+
+  let formattedDepositAmount = 0;
+  try {
+    const { transferAmount, remark } = req.body;
+    formattedDepositAmount = roundToTwoDecimals(transferAmount);
+
+    if (isNaN(formattedDepositAmount) || formattedDepositAmount <= 0) {
+      return res.status(200).json({ success: false, error: "invalid_amount" });
+    }
+
+    const { userId } = req.params;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(200).json({ success: false, error: "user_not_found" });
+    }
+
+    if (!user.jokerGameName) {
+      return res
+        .status(200)
+        .json({ success: false, error: "game_not_registered" });
+    }
+
+    if (user.gameStatus.jokerx2.transferInStatus) {
+      return res.status(200).json({ success: false, error: "transfer_locked" });
+    }
+
+    const depositResponse = await JokerDeposit(
+      user,
+      formattedDepositAmount,
+      "2x"
+    );
+
+    if (!depositResponse.success) {
+      return res.status(200).json({ success: false, error: "deposit_failed" });
+    }
+
+    await GameWalletLogAttempt(
+      user.username,
+      "Transfer In",
+      remark || "Free Credit Apply",
+      roundToTwoDecimals(formattedDepositAmount),
+      "JOKER X2",
+      roundToTwoDecimals(depositResponse.data.Credit || 0),
+      0,
+      0
+    );
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.log("Internal JOKER deposit error:", error.message);
+    return res.status(200).json({ success: false, error: "server_error" });
+  }
+});
+
 router.post(
   "/admin/api/jokerx2/deposit/:userId",
   authenticateAdminToken,

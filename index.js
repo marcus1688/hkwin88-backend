@@ -740,8 +740,63 @@ const handleAutoReply = async (conversation, messageText) => {
   const step = conversation.step;
   const lang = conversation.language;
 
+  const agentKeywords = [
+    "客服",
+    "人工",
+    "真人",
+    "幫我",
+    "帮我",
+    "問題",
+    "问题",
+    "agent",
+    "human",
+    "help",
+    "support",
+    "problem",
+    "issue",
+    "投訴",
+    "投诉",
+    "complain",
+  ];
+
+  if (step && step !== "waiting_agent") {
+    const needsAgent = agentKeywords.some((keyword) =>
+      textLower.includes(keyword.toLowerCase())
+    );
+
+    if (needsAgent) {
+      const isZh = lang === "zh" || !lang;
+      await sendMessage(
+        conversationId,
+        isZh
+          ? `好的，我哋嘅客服會馬上幫您處理❤️\n請稍等~`
+          : `Sure, our customer service will assist you shortly❤️\nPlease wait~`
+      );
+      await updateConversation(conversation._id, {
+        step: "waiting_agent",
+        needsAgent: true,
+      });
+      return;
+    }
+  }
+
+  // ============ 等待客服 - 不自动回复 ============
+  if (step === "waiting_agent") {
+    return;
+  }
+
   // ============ 新客户欢迎 ============
   if (!step) {
+    await sendImage(
+      conversationId,
+      "https://pub-92886b3c2cd44be98c01f0933462d4fd.r2.dev/hkwin-promo-cn.jpg"
+    );
+
+    await sendImage(
+      conversationId,
+      "https://pub-92886b3c2cd44be98c01f0933462d4fd.r2.dev/hkwin-promo-en.jpg"
+    );
+
     await sendMessage(
       conversationId,
       `Welcome to HKWIN88❤️ 歡迎嚟到HKWIN88❤️\n\n` +
@@ -860,10 +915,18 @@ const handleAutoReply = async (conversation, messageText) => {
   // ============ 注册存款 - 收集全名（中文）============
   if (step === "reg_fullname_zh") {
     const fullname = text.trim();
+    const hasChinese = /[\u4e00-\u9fa5]/.test(fullname);
+
     if (fullname.length < 2) {
       await sendMessage(conversationId, `請提供你嘅英文全名~😘`);
       return;
     }
+
+    if (hasChinese) {
+      await sendMessage(conversationId, `⚠️ 請提供英文全名，唔係中文名哦～`);
+      return;
+    }
+
     await updateConversation(conversation._id, {
       "tempData.fullname": fullname,
     });
@@ -923,6 +986,8 @@ const handleAutoReply = async (conversation, messageText) => {
   // ============ 注册存款 - 收集全名（英文）============
   if (step === "reg_fullname_en") {
     const fullname = text.trim();
+    const hasChinese = /[\u4e00-\u9fa5]/.test(fullname);
+
     if (fullname.length < 2) {
       await sendMessage(
         conversationId,
@@ -930,6 +995,15 @@ const handleAutoReply = async (conversation, messageText) => {
       );
       return;
     }
+
+    if (hasChinese) {
+      await sendMessage(
+        conversationId,
+        `⚠️ Please provide your name in English, not Chinese~`
+      );
+      return;
+    }
+
     await updateConversation(conversation._id, {
       "tempData.fullname": fullname,
     });
@@ -995,10 +1069,18 @@ const handleAutoReply = async (conversation, messageText) => {
   // ============ 免费积分 - 收集全名（中文）============
   if (step === "fc_fullname_zh") {
     const fullname = text.trim();
+    const hasChinese = /[\u4e00-\u9fa5]/.test(fullname);
+
     if (fullname.length < 2) {
       await sendMessage(conversationId, `請提供你嘅英文全名：`);
       return;
     }
+
+    if (hasChinese) {
+      await sendMessage(conversationId, `⚠️ 請提供英文全名，唔係中文名哦～`);
+      return;
+    }
+
     await updateConversation(conversation._id, {
       "tempData.fullname": fullname,
     });
@@ -1056,25 +1138,26 @@ const handleAutoReply = async (conversation, messageText) => {
       phone,
       bankName,
       bankNumber,
-      freeCreditApply: false,
+      freeCreditApply: true,
       whatsappPhone: conversation.contactPhone,
     });
 
     if (result.success) {
+      const { jokerGameName, jokerGamePW } = result.data;
       await sendMessage(
         conversationId,
         `✅ 註冊成功！\n\n` +
-          `老闆，請你根據以下指示完成分享步驟即可獲得免費35積分\n` +
-          `只需要2選1❤️\n\n` +
-          `1️⃣ 請你點擊以下鏈接進入我哋FB專頁進行點讚，並且分享最新帖子到10個唔同嘅Joker群組，需標記50好友\n` +
-          `鏈接：bit.ly/3bE49IL\n\n` +
-          `2️⃣ 請你點擊以下鏈接進入我哋TG群組，並且拉15位在線好友到群內\n` +
-          `鏈接：bit.ly/3QgznUt\n\n` +
-          `✅ 完成步驟後，請您提供截圖俾我哋，我哋會幫你查詢\n` +
-          `✅ 免費活動多人申請，請老闆體諒耐心等候，我哋會盡快幫你處理，多謝😍`
+          `🎮 遊戲賬號：${jokerGameName}\n` +
+          `🔑 密碼：${jokerGamePW}\n\n` +
+          `✅ 免費35積分已經轉入您嘅遊戲賬號\n\n` +
+          `📋 規則提醒：\n` +
+          `🆓 免費35積分需打滿350積分可出$100\n` +
+          `🆓 出款只可以出返俾以上您所提供嘅銀行賬號\n` +
+          `🆓 禁止進行老虎機/打魚類型以外嘅遊戲\n\n` +
+          `祝您遊戲愉快！如有任何問題請聯繫客服❤️`
       );
       await updateConversation(conversation._id, {
-        step: "waiting_screenshot",
+        step: "waiting_agent",
         tempData: { fullname, phone, bankName, bankNumber },
       });
     } else if (result.error === "duplicate_name") {
@@ -1121,6 +1204,8 @@ const handleAutoReply = async (conversation, messageText) => {
   // ============ 免费积分 - 收集全名（英文）============
   if (step === "fc_fullname_en") {
     const fullname = text.trim();
+    const hasChinese = /[\u4e00-\u9fa5]/.test(fullname);
+
     if (fullname.length < 2) {
       await sendMessage(
         conversationId,
@@ -1128,6 +1213,15 @@ const handleAutoReply = async (conversation, messageText) => {
       );
       return;
     }
+
+    if (hasChinese) {
+      await sendMessage(
+        conversationId,
+        `⚠️ Please provide your name in English, not Chinese~`
+      );
+      return;
+    }
+
     await updateConversation(conversation._id, {
       "tempData.fullname": fullname,
     });
@@ -1138,7 +1232,6 @@ const handleAutoReply = async (conversation, messageText) => {
     await updateConversation(conversation._id, { step: "fc_phone_en" });
     return;
   }
-
   // ============ 免费积分 - 收集电话（英文）============
   if (step === "fc_phone_en") {
     const phone = text.trim().replace(/\D/g, "");
@@ -1194,25 +1287,26 @@ const handleAutoReply = async (conversation, messageText) => {
       phone,
       bankName,
       bankNumber,
-      freeCreditApply: false,
+      freeCreditApply: true,
       whatsappPhone: conversation.contactPhone,
     });
 
     if (result.success) {
+      const { jokerGameName, jokerGamePW } = result.data;
       await sendMessage(
         conversationId,
         `✅ Registration successful!\n\n` +
-          `Dear, please complete the steps below to get 35 free point❤️\n` +
-          `Choose one option to finish❤️\n\n` +
-          `1️⃣ Please click the link below to our FB page, like our FB page, and share our latest post to 10 different Joker groups\n` +
-          `Link: bit.ly/3bE49IL\n\n` +
-          `2️⃣ Please click the link below to our TG Group, and invite 15 active friends to our group\n` +
-          `Link: bit.ly/3QgznUt\n\n` +
-          `✅ After done provide us screenshot\n` +
-          `✅ 35 Free point many people apply, dear please hold on ya. We will assist you as soon as possible, thank you very much 😍`
+          `🎮 Game Account: ${jokerGameName}\n` +
+          `🔑 Password: ${jokerGamePW}\n\n` +
+          `✅ 35 Free points have been transferred to your game account\n\n` +
+          `📋 Rules Reminder:\n` +
+          `🆓 35 Free points hit over 350 points save $100\n` +
+          `🆓 Withdrawal can only be cash out to the bank account you provided\n` +
+          `🆓 Games beside slot machine/fishing are not allowed\n\n` +
+          `Enjoy your game! Contact us if you have any questions❤️`
       );
       await updateConversation(conversation._id, {
-        step: "waiting_screenshot",
+        step: "waiting_agent",
         tempData: { fullname, phone, bankName, bankNumber },
       });
     } else if (result.error === "duplicate_name") {
@@ -1279,6 +1373,33 @@ const sendMessage = async (conversationId, text) => {
       "Send message failed:",
       error.response?.data || error.message
     );
+  }
+};
+
+const sendImage = async (conversationId, imageUrl, caption = "") => {
+  try {
+    const response = await axios.post(
+      `https://conversations.messagebird.com/v1/conversations/${conversationId}/messages`,
+      {
+        type: "image",
+        content: {
+          image: {
+            url: imageUrl,
+            caption: caption,
+          },
+        },
+      },
+      {
+        headers: {
+          Authorization: `AccessKey ${process.env.MESSAGEBIRD_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Send image error:", error.response?.data || error.message);
+    return null;
   }
 };
 

@@ -2764,6 +2764,10 @@ router.get("/admin/api/allusers", authenticateAdminToken, async (req, res) => {
                 },
               },
             },
+            { phoneNumbers: { $regex: search, $options: "i" } },
+            { "bankAccounts.banknumber": { $regex: search, $options: "i" } },
+            { "bankAccounts.bankname": { $regex: search, $options: "i" } },
+            { "bankAccounts.name": { $regex: search, $options: "i" } },
             ...(isNaN(search) ? [] : [{ userid: parseInt(search) }]),
           ],
         }
@@ -2970,6 +2974,22 @@ router.post("/internal/registeruser", async (req, res) => {
       ],
     });
     if (existingPhoneNumber) {
+      // 找出匹配的号码
+      const matchedPhone = formattedPhoneNumbers.find(
+        (phone) =>
+          phone === existingPhoneNumber.phonenumber ||
+          existingPhoneNumber.phoneNumbers?.includes(phone)
+      );
+      console.log("Duplicate phone detected:", {
+        inputPhones: formattedPhoneNumbers,
+        matchedPhone: matchedPhone,
+        existingUser: {
+          userid: existingPhoneNumber.userid,
+          fullname: existingPhoneNumber.fullname,
+          phonenumber: existingPhoneNumber.phonenumber,
+          phoneNumbers: existingPhoneNumber.phoneNumbers,
+        },
+      });
       return res.status(200).json({
         success: false,
         error: "duplicate_phone",
@@ -3099,10 +3119,13 @@ router.post("/internal/registeruser", async (req, res) => {
           const bonusAmount = Number(freeCreditPromotion.bonusexact);
           const transferAmount = bonusAmount / 2;
 
-          const transferUrl = `${API_URL}${selectedKiosk.transferInAPI}/${newUser._id}`;
+          const transferUrl = `${process.env.BASE_URL}internal/jokerx2/deposit/${newUser._id}`;
           const transferResponse = await fetch(transferUrl, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "x-internal-key": process.env.INTERNAL_API_KEY,
+            },
             body: JSON.stringify({ transferAmount }),
           });
           const transferResult = await transferResponse.json();
@@ -3154,7 +3177,7 @@ router.post("/internal/registeruser", async (req, res) => {
         console.error("Free Credit Apply error:", error.message);
       }
     }
-
+    const updatedUser = await User.findById(newUser._id);
     res.status(200).json({
       success: true,
       message: {
@@ -3163,8 +3186,10 @@ router.post("/internal/registeruser", async (req, res) => {
       },
       data: {
         userid: newUserId,
-        username: newUser.username,
+        username: updatedUser.username,
         password: password,
+        jokerGameName: updatedUser.jokerGameName || null,
+        jokerGamePW: updatedUser.jokerGamePW || null,
       },
     });
   } catch (error) {
