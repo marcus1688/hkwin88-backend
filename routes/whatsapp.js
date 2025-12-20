@@ -73,7 +73,7 @@ router.post(
 // Update Webhooks
 router.put(
   "/admin/api/webhook/update",
-  // authenticateAdminToken,
+  authenticateAdminToken,
   async (req, res) => {
     try {
       const { webhookId, url } = req.body;
