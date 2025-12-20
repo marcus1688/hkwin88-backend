@@ -5726,6 +5726,7 @@ router.post(
       const todayWithdrawalCount = await Withdraw.countDocuments({
         userId: user._id,
         status: "approved",
+        bankname: { $ne: "User Wallet" },
         createdAt: {
           $gte: todayStart.toDate(),
           $lte: todayEnd.toDate(),
@@ -7545,6 +7546,61 @@ router.post(
       });
     } catch (error) {
       console.error("Error checking bank limit:", error);
+      res.status(500).json({
+        success: false,
+        message: {
+          en: "Internal server error",
+          zh: "服务器内部错误",
+        },
+      });
+    }
+  }
+);
+
+// Admin Get User Today Withdraw Limit
+router.get(
+  "/admin/api/user-daily-withdraw-count/:userId",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "User not found",
+            zh: "找不到用户",
+          },
+        });
+      }
+      const withdrawCountLimit = 10;
+      const malaysiaTimezone = "Asia/Kuala_Lumpur";
+      const todayStart = moment().tz(malaysiaTimezone).startOf("day").utc();
+      const todayEnd = moment().tz(malaysiaTimezone).endOf("day").utc();
+      const todayWithdrawalCount = await Withdraw.countDocuments({
+        userId: user._id,
+        status: "approved",
+        bankname: { $ne: "User Wallet" },
+        createdAt: {
+          $gte: todayStart.toDate(),
+          $lte: todayEnd.toDate(),
+        },
+      });
+      res.status(200).json({
+        success: true,
+        data: {
+          userId: user._id,
+          userid: user.userid,
+          username: user.username,
+          todayCount: todayWithdrawalCount,
+          limit: withdrawCountLimit,
+          remaining: Math.max(0, withdrawCountLimit - todayWithdrawalCount),
+          limitReached: todayWithdrawalCount >= withdrawCountLimit,
+        },
+      });
+    } catch (error) {
+      console.error("Error getting daily withdraw count:", error);
       res.status(500).json({
         success: false,
         message: {
