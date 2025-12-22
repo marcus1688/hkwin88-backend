@@ -10,6 +10,8 @@ const { v4: uuidv4 } = require("uuid");
 const querystring = require("querystring");
 const GameWalletLog = require("../../models/gamewalletlog.model");
 const moment = require("moment");
+const GameSyncLog = require("../../models/game_syncdata.model");
+const slotJokerModal = require("../../models/slot_joker.model");
 require("dotenv").config();
 
 function generateUniqueTransactionId(prefix) {
@@ -2062,6 +2064,378 @@ router.get(
     }
   }
 );
+
+const getJokerLastSyncTime = async () => {
+  const syncLog = await GameSyncLog.findOne({ provider: "joker" }).lean();
+  return syncLog?.syncTime || null;
+};
+
+// ========== UPDATE LAST SYNC TIME ==========
+const updateJokerLastSyncTime = async (time) => {
+  await GameSyncLog.findOneAndUpdate(
+    { provider: "joker" },
+    { syncTime: time.toDate() },
+    { upsert: true, new: true }
+  );
+};
+
+// ========== FETCH SINGLE PAGE ==========
+const fetchJokerPage = async (start, end, nextId = "") => {
+  try {
+    const timestamp = moment().unix();
+
+    const fields = {
+      Method: "TS",
+      StartDate: start,
+      EndDate: end,
+      NextId: nextId,
+      Delay: 0,
+      Timestamp: timestamp,
+    };
+
+    const Signature = generateSignature(fields, gameKEY);
+
+    const response = await axios.post(
+      `${gameAPIURL}?appid=${gameAPPID}&signature=${encodeURIComponent(
+        Signature
+      )}`,
+      fields,
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (response.status !== 200) {
+      return {
+        success: false,
+        error: response.data,
+        data: null,
+        nextId: "",
+      };
+    }
+
+    return {
+      success: true,
+      data: response.data.data || {},
+      nextId: response.data.nextId || "",
+      games: response.data.games || [],
+    };
+  } catch (error) {
+    console.error("[JOKER] Fetch page error:", error.message);
+    return {
+      success: false,
+      error: error.message,
+      data: null,
+      nextId: "",
+    };
+  }
+};
+
+// ========== FETCH ALL PAGES FOR TIME RANGE ==========
+const fetchJokerAllPages = async (start, end) => {
+  let allTransactions = [];
+  let gamesMap = {};
+  let nextId = "";
+  let pageCount = 0;
+
+  do {
+    const result = await fetchJokerPage(start, end, nextId);
+
+    if (!result.success) {
+      console.error("[JOKER] Fetch failed at page", pageCount + 1);
+      break;
+    }
+
+    pageCount++;
+
+    // Build games map for GameCode -> GameName lookup
+    if (result.games && result.games.length > 0) {
+      result.games.forEach((game) => {
+        gamesMap[game.GameCode] = game.GameName;
+      });
+    }
+
+    // Collect transactions from all types (Game, Jackpot, Competition)
+    const data = result.data;
+    if (data.Game && data.Game.length > 0) {
+      allTransactions = allTransactions.concat(data.Game);
+    }
+    if (data.Jackpot && data.Jackpot.length > 0) {
+      allTransactions = allTransactions.concat(data.Jackpot);
+    }
+    if (data.Competition && data.Competition.length > 0) {
+      allTransactions = allTransactions.concat(data.Competition);
+    }
+
+    nextId = result.nextId || "";
+
+    // Delay between pages
+    if (nextId) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    // Safety limit
+    if (pageCount >= 100) {
+      console.warn("[JOKER] Reached max page limit (100)");
+      break;
+    }
+  } while (nextId);
+
+  console.log(
+    `[JOKER] Fetched ${allTransactions.length} transactions from ${pageCount} pages`
+  );
+
+  return {
+    success: true,
+    data: allTransactions,
+    gamesMap,
+    pagesProcessed: pageCount,
+  };
+};
+
+// ========== MAP JOKER TRANSACTION TO DB FORMAT ==========
+const mapJokerTransaction = (tx, gamesMap, startDate, endDate) => {
+  const betAmount = parseFloat(tx.Amount || 0);
+  const result = parseFloat(tx.Result || 0);
+  const gameName = gamesMap[tx.GameCode] || tx.GameCode || "JOKER";
+
+  return {
+    betId: tx.OCode,
+    username: tx.Username,
+    gameName: gameName,
+    beganbalance: parseFloat(tx.StartBalance || 0),
+    endbalance: parseFloat(tx.EndBalance || 0),
+    betamount: betAmount,
+    settleamount: result,
+    bet: true,
+    settle: true,
+    startDate: startDate,
+    endDate: endDate,
+    claimed: false,
+    disqualified: false,
+    betTime: tx.Time
+      ? moment.tz(tx.Time, "Asia/Kuala_Lumpur").utc().toDate()
+      : moment.tz("Asia/Kuala_Lumpur").utc().toDate(),
+  };
+};
+
+// ========== SYNC FOR SINGLE HOUR ==========
+const syncJokerForHour = async (startHour, endHour) => {
+  try {
+    const start = startHour.format("YYYY-MM-DD HH:00");
+    const end = endHour.format("YYYY-MM-DD HH:00");
+
+    console.log(`[JOKER Sync] Fetching: ${start} to ${end}`);
+
+    const fetchResult = await fetchJokerAllPages(start, end);
+
+    if (!fetchResult.success || fetchResult.data.length === 0) {
+      return {
+        success: true,
+        start,
+        end,
+        fetched: 0,
+        inserted: 0,
+        skipped: 0,
+      };
+    }
+
+    const startDateObj = moment
+      .tz(startHour, "Asia/Kuala_Lumpur")
+      .utc()
+      .toDate();
+    const endDateObj = moment.tz(endHour, "Asia/Kuala_Lumpur").utc().toDate();
+
+    // Map transactions to DB format
+    const mappedTransactions = fetchResult.data.map((tx) =>
+      mapJokerTransaction(tx, fetchResult.gamesMap, startDateObj, endDateObj)
+    );
+
+    // Check for existing betIds (OCode)
+    const betIds = mappedTransactions.map((tx) => tx.betId);
+    const existingBetIds = new Set(
+      (
+        await slotJokerModal
+          .find({ betId: { $in: betIds } }, { betId: 1 })
+          .lean()
+      ).map((r) => r.betId)
+    );
+
+    // Filter out existing records
+    const newRecords = mappedTransactions.filter(
+      (tx) => !existingBetIds.has(tx.betId)
+    );
+    const skipped = mappedTransactions.length - newRecords.length;
+
+    let inserted = 0;
+
+    if (newRecords.length > 0) {
+      try {
+        const result = await slotJokerModal.insertMany(newRecords, {
+          ordered: false,
+        });
+        inserted = result.length;
+      } catch (error) {
+        if (error.code === 11000) {
+          inserted = error.insertedDocs?.length || 0;
+          console.log("[JOKER Sync] Some duplicates skipped during insert");
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    return {
+      success: true,
+      start,
+      end,
+      fetched: fetchResult.data.length,
+      inserted,
+      skipped,
+    };
+  } catch (error) {
+    console.error(`[JOKER Sync] Hour sync error:`, error.message);
+    return {
+      success: false,
+      error: error.message,
+      inserted: 0,
+      skipped: 0,
+    };
+  }
+};
+
+// ========== MAIN SYNC FUNCTION ==========
+const syncJokerGameHistory = async () => {
+  try {
+    const now = moment.tz("Asia/Kuala_Lumpur");
+
+    // Get last sync time
+    const lastSyncTime = await getJokerLastSyncTime();
+
+    let startMoment;
+    if (!lastSyncTime) {
+      // First run - sync last 2 hours
+      console.log("[JOKER Sync] First run - syncing last 2 hours");
+      startMoment = now.clone().subtract(2, "hours").startOf("hour");
+    } else {
+      // Continue from last sync time
+      startMoment = moment
+        .tz(lastSyncTime, "Asia/Kuala_Lumpur")
+        .startOf("hour");
+      console.log(
+        `[JOKER Sync] Last sync: ${startMoment.format("YYYY-MM-DD HH:mm:ss")}`
+      );
+    }
+
+    // End time is current hour + 1 (to include current hour data)
+    const endMoment = now.clone().startOf("hour").add(1, "hour");
+
+    // If start equals or after end, nothing to sync yet
+    if (startMoment.isSameOrAfter(endMoment)) {
+      console.log("[JOKER Sync] No new hour to sync yet");
+      return {
+        success: true,
+        syncTime: now.format("YYYY-MM-DD HH:mm:ss"),
+        fetched: 0,
+        inserted: 0,
+        skipped: 0,
+        message: "No new hour to sync",
+      };
+    }
+
+    // Calculate hours to sync
+    const hoursToSync = [];
+    let hourPointer = startMoment.clone();
+
+    while (hourPointer.isBefore(endMoment)) {
+      const nextHour = hourPointer.clone().add(1, "hour");
+      hoursToSync.push({
+        start: hourPointer.clone(),
+        end: nextHour.clone(),
+      });
+      hourPointer = nextHour;
+    }
+
+    // Limit to max 24 hours at a time
+    const chunkedHours = [];
+    for (let i = 0; i < hoursToSync.length; i += 24) {
+      chunkedHours.push(hoursToSync.slice(i, i + 24));
+    }
+
+    console.log(
+      `[JOKER Sync] ${hoursToSync.length} hours to sync in ${chunkedHours.length} chunks`
+    );
+
+    let totalResults = {
+      fetched: 0,
+      inserted: 0,
+      skipped: 0,
+      chunks: 0,
+    };
+
+    // Process each chunk (max 24 hours)
+    for (const chunk of chunkedHours) {
+      if (chunk.length === 0) continue;
+
+      const chunkStart = chunk[0].start;
+      const chunkEnd = chunk[chunk.length - 1].end;
+
+      const result = await syncJokerForHour(chunkStart, chunkEnd);
+
+      if (result.success) {
+        totalResults.fetched += result.fetched || 0;
+        totalResults.inserted += result.inserted || 0;
+        totalResults.skipped += result.skipped || 0;
+        totalResults.chunks++;
+      }
+
+      // Delay between chunks
+      if (chunkedHours.indexOf(chunk) < chunkedHours.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+
+    // Update last sync time to current time (e.g., 10:36)
+    await updateJokerLastSyncTime(now);
+
+    console.log(
+      `✅ [JOKER Sync] Completed - Fetched: ${totalResults.fetched}, Inserted: ${totalResults.inserted}, Skipped: ${totalResults.skipped}`
+    );
+
+    return {
+      success: true,
+      syncTime: now.format("YYYY-MM-DD HH:mm:ss"),
+      ...totalResults,
+    };
+  } catch (error) {
+    console.error("[JOKER Sync] Fatal error:", error.message);
+    return {
+      success: false,
+      error: error.message,
+      inserted: 0,
+      skipped: 0,
+    };
+  }
+};
+
+if (process.env.NODE_ENV !== "development") {
+  cron.schedule("*/5 * * * *", async () => {
+    try {
+      const jokerResult = await syncJokerGameHistory();
+      if (jokerResult.success) {
+        console.log(
+          `✅ JOKER: ${jokerResult.inserted} inserted, ${jokerResult.skipped} skipped`
+        );
+      } else {
+        console.error("❌ JOKER sync failed:", jokerResult.error);
+      }
+    } catch (error) {
+      console.error("❌ JOKER cron error:", error.message);
+    }
+  });
+}
 
 module.exports = router;
 module.exports.registerJokerUser = registerJokerUser;
