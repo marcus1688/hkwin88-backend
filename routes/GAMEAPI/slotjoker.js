@@ -2438,6 +2438,62 @@ if (process.env.NODE_ENV !== "development") {
   });
 }
 
+const fetchjokerDetailhistory = async (transactionID, gameLang) => {
+  try {
+    const timestamp = moment().unix();
+
+    let lang = "en";
+
+    if (gameLang === "zh") {
+      lang = "zh";
+    } else {
+      lang = "en";
+    }
+
+    const fields = {
+      Method: "History",
+      OCode: transactionID,
+      Language: lang,
+      Type: "Game",
+      Timestamp: timestamp,
+    };
+
+    const Signature = generateSignature(fields, gameKEY);
+
+    const response = await axios.post(
+      `${gameAPIURL}?appid=${gameAPPID}&signature=${encodeURIComponent(
+        Signature
+      )}`,
+      fields,
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    if (response.status !== 200) {
+      return {
+        success: false,
+        error: response.data,
+        data: null,
+      };
+    }
+
+    return {
+      success: true,
+      data: response.data.Url || {},
+    };
+  } catch (error) {
+    console.error("[JOKER] Fetch detail history error:", error.message);
+    return {
+      success: false,
+      error: error.message,
+      data: null,
+    };
+  }
+};
+
 module.exports = router;
 module.exports.registerJokerUser = registerJokerUser;
 module.exports.JokerCheckBalance = JokerCheckBalance;
+module.exports.fetchjokerDetailhistory = fetchjokerDetailhistory;

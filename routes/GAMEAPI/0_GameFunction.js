@@ -15,7 +15,7 @@ const moment = require("moment");
 const { JokerCheckBalance } = require("./slotjoker");
 const GameWalletLog = require("../../models/gamewalletlog.model");
 const slotJokerModal = require("../../models/slot_joker.model");
-
+const { fetchjokerDetailhistory } = require("./slotjoker");
 require("dotenv").config();
 
 async function GameWalletLogAttempt(
@@ -368,6 +368,88 @@ router.post(
           en: "Failed to fetch bet history. Please try again.",
           zh: "获取投注历史失败，请重试。",
           ms: "Gagal mendapatkan sejarah pertaruhan. Sila cuba lagi.",
+        },
+        error: error.message,
+      });
+    }
+  }
+);
+
+router.post(
+  "/admin/api/getgamedetailhistory",
+  authenticateAdminToken,
+  async (req, res) => {
+    try {
+      const { provider, transactionId, lang = "en" } = req.body;
+
+      if (!provider || !transactionId) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Provider and transaction ID are required.",
+            zh: "供应商和交易ID是必填项。",
+            ms: "Pembekal dan ID transaksi diperlukan.",
+          },
+        });
+      }
+
+      const providerUpper = provider.toUpperCase();
+
+      let result;
+
+      switch (providerUpper) {
+        case "JOKER":
+          result = await fetchjokerDetailhistory(transactionId, lang);
+          break;
+
+        // Add more providers here
+        // case "MEGA888":
+        //   result = await fetchMega888DetailHistory(transactionId, lang);
+        //   break;
+
+        // case "918KISS":
+        //   result = await fetch918KissDetailHistory(transactionId, lang);
+        //   break;
+
+        // case "YEEBET":
+        //   result = await fetchYeebetDetailHistory(transactionId, lang);
+        //   break;
+
+        default:
+          return res.status(200).json({
+            success: false,
+            message: {
+              en: `Provider "${provider}" is not supported.`,
+              zh: `不支持供应商 "${provider}"。`,
+              ms: `Pembekal "${provider}" tidak disokong.`,
+            },
+          });
+      }
+
+      if (!result.success) {
+        return res.status(200).json({
+          success: false,
+          message: {
+            en: "Failed to fetch game detail history.",
+            zh: "获取游戏详细历史失败。",
+            ms: "Gagal mendapatkan sejarah terperinci permainan.",
+          },
+          error: result.error,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: result.data,
+      });
+    } catch (error) {
+      console.error("Error fetching game detail history:", error.message);
+      return res.status(200).json({
+        success: false,
+        message: {
+          en: "Failed to fetch game detail history. Please try again.",
+          zh: "获取游戏详细历史失败，请重试。",
+          ms: "Gagal mendapatkan sejarah terperinci permainan. Sila cuba lagi.",
         },
         error: error.message,
       });
