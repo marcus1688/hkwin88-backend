@@ -5919,7 +5919,7 @@ router.post(
         });
       }
 
-      const withdrawCountLimit = 10;
+      const withdrawCountLimit = 100;
       const malaysiaTimezone = "Asia/Kuala_Lumpur";
       const todayStart = moment().tz(malaysiaTimezone).startOf("day").utc();
       const todayEnd = moment().tz(malaysiaTimezone).endOf("day").utc();
