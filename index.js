@@ -1115,7 +1115,12 @@ const handleAutoReply = async (conversation, messageText) => {
     await updateConversation(conversation._id, {
       "tempData.bankName": bankName,
     });
-    await sendMessage(conversationId, `請提供你嘅銀行賬號號碼：`);
+    await sendMessage(
+      conversationId,
+      `請提供你嘅銀行賬號號碼：
+
+⚠️ 免費分唔接受轉數快，填轉數快一律唔處理出款`
+    );
     await updateConversation(conversation._id, { step: "fc_banknumber_zh" });
     return;
   }
@@ -1260,7 +1265,9 @@ const handleAutoReply = async (conversation, messageText) => {
     });
     await sendMessage(
       conversationId,
-      `Please provide your bank account number:`
+      `Please provide your bank account number:
+
+⚠️ Free credits do not accept FPS, FPS withdrawals will not be processed`
     );
     await updateConversation(conversation._id, { step: "fc_banknumber_en" });
     return;
