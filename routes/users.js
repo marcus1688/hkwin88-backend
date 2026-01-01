@@ -9175,12 +9175,9 @@ const generateMonthlyReportImage = async (
     rowHeight * (dailyReports.length + 1) +
     padding * 2;
 
-  registerFont(
-    path.join(__dirname, "../fonts/Roboto-VariableFont_wdth,wght.ttf"),
-    {
-      family: "Roboto",
-    }
-  );
+  registerFont("Roboto-Bold.ttf", {
+    family: "Roboto",
+  });
 
   // 创建高清 canvas
   const canvas = createCanvas(totalWidth * scale, totalHeight * scale);
@@ -9827,7 +9824,7 @@ router.post(
 // Cron Job: 每天 UTC+8 00:05 自动发送月报图片
 if (process.env.NODE_ENV !== "development") {
   cron.schedule(
-    "27 0 * * *",
+    "30 0 * * *",
     async () => {
       try {
         const timezone = "Asia/Kuala_Lumpur";
