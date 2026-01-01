@@ -9175,7 +9175,7 @@ const generateMonthlyReportImage = async (
     rowHeight * (dailyReports.length + 1) +
     padding * 2;
 
-  registerFont("Roboto-Bold.ttf", {
+  registerFont(path.join(process.cwd(), "Roboto-Bold.ttf"), {
     family: "Roboto",
   });
 
