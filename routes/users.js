@@ -10332,7 +10332,7 @@ if (process.env.NODE_ENV !== "development") {
         );
 
         const caption = `📊 <b>MEGAPNG Monthly Report</b>\n📅 ${month}/${year} (Day 1-${endDay})\n✅ Daily balance verified`;
-        await sendTelegramPhoto(imagePath, caption);
+        await sendTelegramPhoto(imagePath);
         fs.unlinkSync(imagePath);
 
         console.log(
