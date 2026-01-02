@@ -915,15 +915,18 @@ const handleAutoReply = async (conversation, messageText) => {
   // ============ 注册存款 - 收集全名（中文）============
   if (step === "reg_fullname_zh") {
     const fullname = text.trim();
-    const hasChinese = /[\u4e00-\u9fa5]/.test(fullname);
 
-    if (fullname.length < 2) {
-      await sendMessage(conversationId, `請提供你嘅英文全名~😘`);
+    if (!/^[A-Za-z\s]+$/.test(fullname)) {
+      await sendMessage(
+        conversationId,
+        `⚠️ 請只輸入英文全名（例如：CHAN TAI MAN）\n` +
+          `唔好包含數字或其他資料哦～`
+      );
       return;
     }
 
-    if (hasChinese) {
-      await sendMessage(conversationId, `⚠️ 請提供英文全名，唔係中文名哦～`);
+    if (fullname.length < 2) {
+      await sendMessage(conversationId, `請提供你嘅英文全名~😘`);
       return;
     }
 
@@ -986,20 +989,20 @@ const handleAutoReply = async (conversation, messageText) => {
   // ============ 注册存款 - 收集全名（英文）============
   if (step === "reg_fullname_en") {
     const fullname = text.trim();
-    const hasChinese = /[\u4e00-\u9fa5]/.test(fullname);
+
+    if (!/^[A-Za-z\s]+$/.test(fullname)) {
+      await sendMessage(
+        conversationId,
+        `⚠️ Please enter your English full name only (e.g., CHAN TAI MAN)\n` +
+          `Do not include numbers or other information~`
+      );
+      return;
+    }
 
     if (fullname.length < 2) {
       await sendMessage(
         conversationId,
         `Dear please provide your full name ya😍`
-      );
-      return;
-    }
-
-    if (hasChinese) {
-      await sendMessage(
-        conversationId,
-        `⚠️ Please provide your name in English, not Chinese~`
       );
       return;
     }
@@ -1069,15 +1072,16 @@ const handleAutoReply = async (conversation, messageText) => {
   // ============ 免费积分 - 收集全名（中文）============
   if (step === "fc_fullname_zh") {
     const fullname = text.trim();
-    const hasChinese = /[\u4e00-\u9fa5]/.test(fullname);
-
-    if (fullname.length < 2) {
-      await sendMessage(conversationId, `請提供你嘅英文全名：`);
+    if (!/^[A-Za-z\s]+$/.test(fullname)) {
+      await sendMessage(
+        conversationId,
+        `⚠️ 請只輸入英文全名（例如：CHAN TAI MAN）\n` +
+          `唔好包含數字或其他資料哦～`
+      );
       return;
     }
-
-    if (hasChinese) {
-      await sendMessage(conversationId, `⚠️ 請提供英文全名，唔係中文名哦～`);
+    if (fullname.length < 2) {
+      await sendMessage(conversationId, `請提供你嘅英文全名：`);
       return;
     }
 
@@ -1154,6 +1158,9 @@ const handleAutoReply = async (conversation, messageText) => {
         `✅ 註冊成功！\n\n` +
           `🎮 遊戲賬號：${jokerGameName}\n` +
           `🔑 密碼：${jokerGamePW}\n\n` +
+          `🔗 下載鏈接：\n` +
+          `📱 安卓App版本：https://tinyurl.com/c227ct7r\n` +
+          `🌐 網頁版本：https://www.jokerapp888i.net/\n\n` +
           `✅ 免費35積分已經轉入您嘅遊戲賬號\n\n` +
           `📋 規則提醒：\n` +
           `🆓 免費35積分需打滿350積分可出$100\n` +
@@ -1209,20 +1216,18 @@ const handleAutoReply = async (conversation, messageText) => {
   // ============ 免费积分 - 收集全名（英文）============
   if (step === "fc_fullname_en") {
     const fullname = text.trim();
-    const hasChinese = /[\u4e00-\u9fa5]/.test(fullname);
-
+    if (!/^[A-Za-z\s]+$/.test(fullname)) {
+      await sendMessage(
+        conversationId,
+        `⚠️ Please enter your English full name only (e.g., CHAN TAI MAN)\n` +
+          `Do not include numbers or other information~`
+      );
+      return;
+    }
     if (fullname.length < 2) {
       await sendMessage(
         conversationId,
         `Please provide your English full name:`
-      );
-      return;
-    }
-
-    if (hasChinese) {
-      await sendMessage(
-        conversationId,
-        `⚠️ Please provide your name in English, not Chinese~`
       );
       return;
     }
@@ -1305,6 +1310,9 @@ const handleAutoReply = async (conversation, messageText) => {
         `✅ Registration successful!\n\n` +
           `🎮 Game Account: ${jokerGameName}\n` +
           `🔑 Password: ${jokerGamePW}\n\n` +
+          `🔗 Download Links:\n` +
+          `📱 Android App: https://tinyurl.com/c227ct7r\n` +
+          `🌐 Web Version: https://www.jokerapp888i.net/\n\n` +
           `✅ 35 Free points have been transferred to your game account\n\n` +
           `📋 Rules Reminder:\n` +
           `🆓 35 Free points hit over 350 points save $100\n` +
