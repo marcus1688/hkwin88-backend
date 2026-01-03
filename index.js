@@ -1137,6 +1137,15 @@ const handleAutoReply = async (conversation, messageText) => {
       return;
     }
 
+    if (bankNumber.length === 8) {
+      await sendMessage(
+        conversationId,
+        `⚠️ 您輸入嘅似乎係FPS轉數快號碼\n\n` +
+          `免費積分唔接受FPS，請提供您嘅銀行賬戶號碼：`
+      );
+      return;
+    }
+
     const tempData = conversation.tempData || {};
     const fullname = tempData.fullname;
     const phone = tempData.phone;
@@ -1285,6 +1294,15 @@ const handleAutoReply = async (conversation, messageText) => {
       await sendMessage(
         conversationId,
         `Please provide a valid bank account number:`
+      );
+      return;
+    }
+
+    if (bankNumber.length === 8) {
+      await sendMessage(
+        conversationId,
+        `⚠️ It seems you entered an FPS number\n\n` +
+          `Free credits do not accept FPS, please provide your bank account number:`
       );
       return;
     }
